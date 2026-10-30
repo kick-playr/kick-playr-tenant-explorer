@@ -1,0 +1,265 @@
+import './dom.ts';
+import React from 'react';
+import { test, afterEach } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  cleanup,
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+} from '@testing-library/react';
+import { Explorer } from '../src/components/explorer.tsx';
+import { ApiError, type Transport } from '../src/lib/api.ts';
+import type { Tenant } from '../src/lib/types.ts';
+afterEach(cleanup);
+const tenant: Tenant = {
+  id: 'winikon',
+  environment: 'development',
+  hostname: 'winikon.localhost:4311',
+  aliases: [],
+  status: 'active',
+  configRevision: 4,
+  public: { name: 'FC Winikon', locale: 'de-CH' },
+  secretReferences: { mongoUri: 'local:mongo', key: 'local:key' },
+  identityRealm: 'https://club.clerk.accounts.dev',
+  authorityRevision: 4,
+  configuration: {},
+  users: [],
+  integrations: [],
+  credentials: [],
+};
+
+test('loads a real tenant editor and sends domain changes with the current revision', async () => {
+  let body: Record<string, unknown> | undefined;
+  const request: Transport = async (path, options) => {
+    if (options?.method === 'PATCH') {
+      body = JSON.parse(String(options.body));
+      return { ...tenant, hostname: body!.hostname, configRevision: 5 };
+    }
+    if (path.includes('?'))
+      return { items: [tenant], total: 1, page: 1, pageSize: 20 };
+    return tenant;
+  };
+  render(<Explorer request={request} />);
+  fireEvent.click(
+    await screen.findByRole('button', { name: /Open FC Winikon/ }),
+  );
+  fireEvent.click(await screen.findByRole('tab', { name: 'Domains' }));
+  fireEvent.change(screen.getByLabelText('Canonical hostname'), {
+    target: { value: 'new.localhost:4311' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Save domains' }));
+  await waitFor(() => assert.equal(body?.hostname, 'new.localhost:4311'));
+  assert.equal(body?.expectedRevision, 4);
+  await screen.findByText('Changes saved.');
+});
+
+test('keeps a failed edit and shows a useful conflict instead of claiming success', async () => {
+  const request: Transport = async (path, options) => {
+    if (options?.method)
+      throw new ApiError(409, 'Tenant changed; reload before saving');
+    return path.includes('?')
+      ? { items: [tenant], total: 1, page: 1, pageSize: 20 }
+      : tenant;
+  };
+  render(<Explorer request={request} />);
+  fireEvent.click(
+    await screen.findByRole('button', { name: /Open FC Winikon/ }),
+  );
+  fireEvent.click(await screen.findByRole('tab', { name: 'Domains' }));
+  fireEvent.change(screen.getByLabelText('Canonical hostname'), {
+    target: { value: 'new.localhost:4311' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Save domains' }));
+  await screen.findByText('Tenant changed; reload before saving');
+  assert.equal(
+    (screen.getByLabelText('Canonical hostname') as HTMLInputElement).value,
+    'new.localhost:4311',
+  );
+});
+
+test('tenant creation collects control-plane references and opens the created tenant', async () => {
+  let submitted: Record<string, unknown> | undefined;
+  const request: Transport = async (_path, options) => {
+    if (options?.method === 'POST') {
+      submitted = JSON.parse(String(options.body));
+      return tenant;
+    }
+    return { items: [], total: 0, page: 1, pageSize: 20 };
+  };
+  render(<Explorer request={request} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Create tenant' }));
+  for (const [label, value] of [
+    ['Tenant ID', 'winikon'],
+    ['Display name', 'FC Winikon'],
+    ['Canonical hostname', 'winikon.localhost:4311'],
+    ['Identity realm', tenant.identityRealm],
+    ['MongoDB reference', 'local:mongo'],
+    ['Encryption key reference', 'local:key'],
+  ])
+    fireEvent.change(screen.getByLabelText(label!), { target: { value } });
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Create provisioning tenant' }),
+  );
+  await waitFor(() => assert.equal(submitted?.id, 'winikon'));
+  assert.deepEqual(submitted?.secretReferences, {
+    mongoUri: 'local:mongo',
+    key: 'local:key',
+  });
+  await screen.findByRole('tab', { name: 'Domains' });
+});
+
+test('prevents switching tenants while a save is in flight', async () => {
+  let finish!: (result: unknown) => void;
+  const other = {
+    ...tenant,
+    id: 'uster',
+    public: { ...tenant.public, name: 'FC Uster' },
+  };
+  const request: Transport = async (path, options) => {
+    if (options?.method === 'PATCH')
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    return path.includes('?')
+      ? { items: [tenant, other], total: 2, page: 1, pageSize: 20 }
+      : tenant;
+  };
+  render(<Explorer request={request} />);
+  fireEvent.click(
+    await screen.findByRole('button', { name: /Open FC Winikon/ }),
+  );
+  fireEvent.click(await screen.findByRole('tab', { name: 'Domains' }));
+  fireEvent.change(screen.getByLabelText('Canonical hostname'), {
+    target: { value: 'new.localhost:4311' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Save domains' }));
+  assert.equal(
+    (screen.getByRole('button', { name: /Open FC Uster/ }) as HTMLButtonElement)
+      .disabled,
+    true,
+  );
+  assert.equal(
+    (screen.getByRole('button', { name: 'Create tenant' }) as HTMLButtonElement)
+      .disabled,
+    true,
+  );
+  finish({ ...tenant, configRevision: 5 });
+  await screen.findByText('Changes saved.');
+});
+
+test('discarding edits to open creation resets the old form even if creation is cancelled', async () => {
+  const original = window.confirm;
+  window.confirm = () => true;
+  const request: Transport = async (path) =>
+    path.includes('?')
+      ? { items: [tenant], total: 1, page: 1, pageSize: 20 }
+      : tenant;
+  try {
+    render(<Explorer request={request} />);
+    fireEvent.click(
+      await screen.findByRole('button', { name: /Open FC Winikon/ }),
+    );
+    fireEvent.click(await screen.findByRole('tab', { name: 'Domains' }));
+    fireEvent.change(screen.getByLabelText('Canonical hostname'), {
+      target: { value: 'discard.localhost:4311' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create tenant' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Domains' }));
+    assert.equal(
+      (screen.getByLabelText('Canonical hostname') as HTMLInputElement).value,
+      tenant.hostname,
+    );
+  } finally {
+    window.confirm = original;
+  }
+});
+
+test('credential, integration and user forms call their real management routes', async () => {
+  let current = structuredClone(tenant);
+  const writes: { path: string; body: Record<string, unknown> }[] = [];
+  const request: Transport = async (path, options) => {
+    if (options?.method) {
+      const body = JSON.parse(String(options.body));
+      writes.push({ path, body });
+      current = { ...current, configRevision: current.configRevision + 1 };
+      if (path.includes('/credentials/'))
+        current.credentials = [
+          {
+            id: 'mail',
+            label: 'Mail password',
+            status: 'active',
+            revision: 1,
+            updatedAt: '2026-10-30T12:00:00Z',
+          },
+        ];
+      return current;
+    }
+    return path.includes('?')
+      ? { items: [current], total: 1, page: 1, pageSize: 20 }
+      : current;
+  };
+  render(<Explorer request={request} />);
+  fireEvent.click(
+    await screen.findByRole('button', { name: /Open FC Winikon/ }),
+  );
+  fireEvent.click(await screen.findByRole('tab', { name: 'Credentials' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Add credential' }));
+  fireEvent.change(screen.getByLabelText('Credential ID'), {
+    target: { value: 'mail' },
+  });
+  fireEvent.change(screen.getByLabelText('Label'), {
+    target: { value: 'Mail password' },
+  });
+  fireEvent.change(screen.getByLabelText('Secret value'), {
+    target: { value: 'private-value' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Store credential' }));
+  await waitFor(() => assert.equal(writes.length, 1));
+  await screen.findByText('Changes saved.');
+  assert.equal(writes[0]?.path, 'tenants/development/winikon/credentials/mail');
+  assert.equal(writes[0]?.body.value, 'private-value');
+  assert.equal(screen.queryByDisplayValue('private-value'), null);
+
+  fireEvent.click(screen.getByRole('tab', { name: 'Integrations' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Add integration' }));
+  for (const [label, entry] of [
+    ['Connection ID', 'club-mail'],
+    ['Connection label', 'Club mail'],
+    ['Account reference', 'mailbox-1'],
+    ['Credential', 'mail'],
+    ['Provider', 'smtp'],
+    ['Capabilities', 'mail:send'],
+  ])
+    fireEvent.change(screen.getByLabelText(label!), {
+      target: { value: entry },
+    });
+  fireEvent.click(screen.getByRole('button', { name: 'Save integration' }));
+  await waitFor(() => assert.equal(writes.length, 2));
+  await screen.findByText('Changes saved.');
+  assert.equal(writes[1]?.body.expectedRevision, 5);
+  assert.equal(writes[1]?.body.credentialId, 'mail');
+  assert.equal(writes[1]?.body.enabled, false);
+
+  fireEvent.click(screen.getByRole('tab', { name: 'Users' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Add user' }));
+  for (const [label, entry] of [
+    ['Clerk subject', 'user_member'],
+    ['Bexio contact ID', '23'],
+    ['Tenant permissions', 'club:teams:read\nclub:settings:read'],
+  ])
+    fireEvent.change(screen.getByLabelText(label!), {
+      target: { value: entry },
+    });
+  fireEvent.click(screen.getByRole('button', { name: 'Save user access' }));
+  await waitFor(() => assert.equal(writes.length, 3));
+  assert.equal(writes[2]?.body.issuer, tenant.identityRealm);
+  assert.equal(writes[2]?.body.contactId, 23);
+  assert.deepEqual(writes[2]?.body.permissions, [
+    'club:teams:read',
+    'club:settings:read',
+  ]);
+  await screen.findByText('Changes saved.');
+});
