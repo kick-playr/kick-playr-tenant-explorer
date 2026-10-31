@@ -26,6 +26,7 @@ import {
   PanelHeading,
   value,
 } from './ui';
+import { ManagerInvitations } from './manager-invitations';
 import { TenantKeys } from './tenant-keys';
 import {
   tenantAdministratorPermissions,
@@ -40,6 +41,7 @@ const tabs = [
   'Integrations',
   'Credentials',
   'Users',
+  'Invitations',
   'Audit',
 ] as const;
 type Tab = (typeof tabs)[number];
@@ -644,6 +646,13 @@ export function TenantEditor({
                 </div>
               )}
             </>
+          )}
+          {tab === 'Invitations' && (
+            <ManagerInvitations
+              environment={tenant.environment}
+              tenantId={tenant.id}
+              request={request}
+            />
           )}
           {tab === 'Audit' && <Audit tenant={tenant} request={request} />}
         </div>

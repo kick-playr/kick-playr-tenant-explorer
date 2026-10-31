@@ -187,3 +187,9 @@ same-origin image route with private caching; logos use the validated image data
 Club custom styles load after authorization, with a built-in palette during the
 initial request. Branding is scoped to the current club and cleared on a club
 change; no credentials or environment-variable changes are needed.
+
+### Manager invitations (APP-27)
+
+The tenant editor has an Invitations tab for bootstrap invitations by email or exact Clerk user ID, with seven-day expiry, explicit recipient acceptance and separate delivery state. Resend invalidates the old link; failed/queued delivery can be retried. Creation needs the API's explicit tenant identity binding and dedicated working SMTP sender. This UI never returns/copies raw invitation tokens.
+
+Acceptance uses the club APP's `/invitations` page and its own Clerk workspace, not the platform console identity. Operational access stays blocked until the separate APP-26 readiness/mapping contract is implemented. The club settings workspace and invitation controls share the same development baseline.
