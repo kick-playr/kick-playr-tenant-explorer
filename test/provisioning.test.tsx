@@ -195,3 +195,101 @@ test('saving the MongoDB URL updates the setup revision and clears old readiness
     cleanup();
   }
 });
+
+test('configures tenant keys without a runtime row and shares the new revision with MongoDB provisioning', async () => {
+  const files = ['wrapping', 'index', 'control'].map((kind) => ({
+    kind,
+    variable: `WORKFLOW_REAL_DEMO_${kind === 'wrapping' ? 'WRAPPING_KEY_V1' : kind.toUpperCase() + '_KEY'}`,
+    status: 'available',
+  }));
+  const guide = {
+    onboardingRevision: 1,
+    steps: [],
+    references: {
+      mongoUri: 'workflow-local:demo:mongo',
+      key: 'workflow-local:demo:key',
+    },
+    operatorSteps: [],
+    verification: null,
+    clerk: null,
+    keys: { files: [] },
+    emailConfigured: false,
+    mongo: {
+      configured: false,
+      editable: true,
+      available: true,
+      revision: 'a'.repeat(64),
+      source: null,
+      requiresReload: false,
+    },
+    keySetup: {
+      available: true,
+      editable: true,
+      registered: false,
+      revision: 'a'.repeat(64),
+      local: { status: 'connected', files },
+    },
+  };
+  const calls: string[] = [];
+  const request = async (path: string, options?: RequestInit) => {
+    if (!options) return guide;
+    calls.push(path);
+    const body = JSON.parse(String(options.body));
+    if (path.endsWith('/configure-keys')) {
+      assert.deepEqual(body, { expectedRevision: 'a'.repeat(64) });
+      return {
+        ...guide.keySetup,
+        registered: true,
+        revision: 'b'.repeat(64),
+        onboardingRevision: 2,
+      };
+    }
+    if (path.endsWith('/mongo-url')) {
+      assert.equal(body.expectedRevision, 'b'.repeat(64));
+      return {
+        ...guide.mongo,
+        configured: true,
+        source: 'pending',
+        revision: 'c'.repeat(64),
+        onboardingRevision: 3,
+      };
+    }
+    throw Error('unexpected');
+  };
+  try {
+    render(
+      <TenantProvisioning
+        environment="development"
+        tenantId="demo"
+        request={request}
+      />,
+    );
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Schlüssel konfigurieren' }),
+    );
+    await screen.findByText(/Schlüssel stimmen in beiden APIs überein/);
+    assert.equal(
+      (
+        screen.getByRole('button', {
+          name: 'Schlüssel konfigurieren',
+        }) as HTMLButtonElement
+      ).disabled,
+      true,
+    );
+    fireEvent.change(screen.getByLabelText('MongoDB-URL'), {
+      target: { value: 'mongodb://PRIVATE_URI' },
+    });
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'MongoDB-URL verschlüsselt speichern',
+      }),
+    );
+    await waitFor(() => assert.equal(calls.length, 2));
+    assert.equal(
+      calls[0],
+      'tenants/development/demo/onboarding/configure-keys',
+    );
+  } finally {
+    cleanup();
+  }
+});
