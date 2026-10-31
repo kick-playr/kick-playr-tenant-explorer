@@ -42,3 +42,9 @@ npm run build
 Tests exercise real React editor interactions in JSDOM plus client/proxy request handling. They use synthetic tenant responses and never write real tenants or providers. Production verification builds use `.next-production`, keeping the existing watch service's `.next` output separate. `npm start` serves the production build on port 3002.
 
 A real signed-in browser session and Mongo-backed management flow require the environment configuration above and the running explorer API. No authentication bypass or demo data is shipped in the application.
+
+### Manager invitations (APP-27)
+
+The tenant editor has an Invitations tab for bootstrap invitations by email or exact Clerk user ID, with seven-day expiry, explicit recipient acceptance and separate delivery state. Resend invalidates the old link; failed/queued delivery can be retried. Creation needs the API's explicit tenant identity binding and dedicated working SMTP sender. This UI never returns/copies raw invitation tokens.
+
+Acceptance uses the club APP's `/invitations` page and its own Clerk workspace, not the platform console identity. Operational access stays blocked until the separate APP-26 readiness/mapping contract is implemented. Existing unpublished club-settings code is not included in this branch.

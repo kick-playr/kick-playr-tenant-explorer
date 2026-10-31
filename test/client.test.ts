@@ -168,3 +168,31 @@ test('proxy admits tenant key inspection without admitting arbitrary file paths'
   );
   assert.equal(result.status, 200);
 });
+
+test('proxy admits only bounded invitation management routes', async () => {
+  for (const suffix of [
+    [],
+    ['abc-123', 'resend'],
+    ['abc-123', 'deliver'],
+    ['abc-123', 'revoke'],
+  ]) {
+    const result = await proxyRequest(
+      new Request('http://localhost:3002/api/explorer/test'),
+      ['tenants', 'development', 'club', 'invitations', ...suffix],
+      'token',
+      'http://127.0.0.1:3003',
+      async () => Response.json([]),
+    );
+    assert.equal(result.status, 200);
+  }
+  const result = await proxyRequest(
+    new Request('http://localhost:3002/api/explorer/test'),
+    ['tenants', 'development', 'club', 'invitations', 'id', 'activate'],
+    'token',
+    'http://127.0.0.1:3003',
+    async () => {
+      throw Error('not called');
+    },
+  );
+  assert.equal(result.status, 400);
+});
