@@ -16,6 +16,18 @@ export function CreateTenant({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>();
+  const [tenantId, setTenantId] = useState(''),
+    [stage, setStage] = useState('development');
+  const [mongo, setMongo] = useState<string | undefined>(),
+    [key, setKey] = useState<string | undefined>();
+  const prefix = (
+    {
+      development: 'workflow-local',
+      preview: 'preview',
+      production: 'prod',
+      test: 'test',
+    } as Record<string, string>
+  )[stage];
   return (
     <Dialog title="Create a tenant" onClose={onClose} busy={busy}>
       <p className="muted modal-intro">
@@ -63,6 +75,7 @@ export function CreateTenant({
             >
               <input
                 name="id"
+                onChange={(e) => setTenantId(e.target.value)}
                 required
                 pattern="[a-z0-9][a-z0-9-]*"
                 maxLength={64}
@@ -70,7 +83,11 @@ export function CreateTenant({
               />
             </Field>
             <Field label="Environment">
-              <select name="environment" defaultValue="development">
+              <select
+                name="environment"
+                value={stage}
+                onChange={(e) => setStage(e.target.value)}
+              >
                 {environments.map((e) => (
                   <option key={e}>{e}</option>
                 ))}
@@ -123,15 +140,23 @@ export function CreateTenant({
             >
               <input
                 name="mongo"
+                value={mongo ?? (tenantId ? `${prefix}:${tenantId}:mongo` : '')}
+                onChange={(e) => setMongo(e.target.value)}
                 required
-                placeholder="tenant:fc-winikon:mongo"
+                placeholder="workflow-local:fc-winikon:mongo"
               />
             </Field>
             <Field
               label="Encryption key reference"
               hint="Reference to the club’s runtime key."
             >
-              <input name="key" required placeholder="tenant:fc-winikon:key" />
+              <input
+                name="key"
+                required
+                value={key ?? (tenantId ? `${prefix}:${tenantId}:key` : '')}
+                onChange={(e) => setKey(e.target.value)}
+                placeholder="workflow-local:fc-winikon:key"
+              />
             </Field>
           </div>
         </fieldset>

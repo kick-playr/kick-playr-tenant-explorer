@@ -27,6 +27,7 @@ import {
   value,
 } from './ui';
 import { ManagerInvitations } from './manager-invitations';
+import { TenantProvisioning } from './tenant-provisioning';
 import { TenantKeys } from './tenant-keys';
 import {
   tenantAdministratorPermissions,
@@ -42,6 +43,7 @@ const tabs = [
   'Credentials',
   'Users',
   'Invitations',
+  'Onboarding',
   'Audit',
 ] as const;
 type Tab = (typeof tabs)[number];
@@ -649,6 +651,13 @@ export function TenantEditor({
           )}
           {tab === 'Invitations' && (
             <ManagerInvitations
+              environment={tenant.environment}
+              tenantId={tenant.id}
+              request={request}
+            />
+          )}
+          {tab === 'Onboarding' && (
+            <TenantProvisioning
               environment={tenant.environment}
               tenantId={tenant.id}
               request={request}
