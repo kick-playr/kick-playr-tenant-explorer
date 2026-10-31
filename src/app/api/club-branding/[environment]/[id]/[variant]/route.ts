@@ -1,5 +1,6 @@
 import { auth } from '@clerk/nextjs/server';
-import { realmForHost } from '@/lib/server-realms';
+import { resolveRealm } from '@/lib/server-realms';
+import { realmUnavailableResponse } from '@/lib/realm-unavailable';
 import { proxyRequest } from '@/lib/proxy';
 import { brandingAssetResponse } from '@/lib/branding-asset-response';
 export const runtime = 'nodejs';
@@ -17,9 +18,8 @@ export async function GET(
     !['faviconLight', 'faviconDark'].includes(variant)
   )
     return new Response(null, { status: 404 });
-  const realm = await realmForHost(request.headers.get('host') ?? '');
-  if (!realm.publishableKey || !realm.secretKey)
-    return new Response(null, { status: 503 });
+  const result = await resolveRealm(request.headers.get('host') ?? '');
+  if (!result.ok) return realmUnavailableResponse('empty', result.error);
   const session = await auth();
   if (!session.userId) return new Response(null, { status: 401 });
   let token: string | null;

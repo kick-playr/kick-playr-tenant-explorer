@@ -1,11 +1,11 @@
-import { BrandLogo } from '@/components/theme-logo';
 import { auth } from '@clerk/nextjs/server';
 import { UserButton } from '@clerk/nextjs';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { Explorer } from '@/components/explorer';
 import { headers } from 'next/headers';
-import { realmForHost } from '@/lib/server-realms';
+import { serverComponentRealm } from '@/lib/server-component-realm';
+import { RealmUnavailable } from '@/components/realm-unavailable';
 import { proxyRequest } from '@/lib/proxy';
 import { ClubExplorer, type ClubSummary } from '@/components/club-explorer';
 
@@ -15,28 +15,10 @@ export default async function Page({
 }: {
   searchParams: Promise<{ view?: string }>;
 }) {
-  const realm = await realmForHost((await headers()).get('host') ?? '');
-  if (!realm.publishableKey || !realm.secretKey)
-    return (
-      <main className="setup-page">
-        <div className="setup-card">
-          <BrandLogo priority />
-          <div className="eyebrow">KICK PLAYR · PLATFORM CONSOLE</div>
-          <h1>Connect your explorer.</h1>
-          <p>
-            The frontend is ready. Configure Clerk, the explorer API origin, and
-            the platform administrator IDs in <code>.env.local</code> to sign
-            in.
-          </p>
-          <p>
-            Use <code>.env.example</code> in each repository for the required
-            values. The API uses the existing tenant control database and
-            requires a separate credential encryption key.
-          </p>
-          <span className="setup-label">Waiting for configuration</span>
-        </div>
-      </main>
-    );
+  const result = await serverComponentRealm(
+    (await headers()).get('host') ?? '',
+  );
+  if (!result.ok) return <RealmUnavailable />;
   const session = await auth();
   if (!session.userId) redirect('/sign-in');
   const response = await proxyRequest(

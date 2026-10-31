@@ -3,7 +3,8 @@ import { ClerkProvider } from '@clerk/nextjs';
 import './globals.css';
 import { themeCss, themeInitScript } from '@/lib/theme';
 import { headers } from 'next/headers';
-import { realmForHost } from '@/lib/server-realms';
+import { serverComponentRealm } from '@/lib/server-component-realm';
+import { RealmUnavailable } from '@/components/realm-unavailable';
 
 export const metadata: Metadata = {
   title: 'Tenant Explorer · Kick Playr',
@@ -13,7 +14,9 @@ export const metadata: Metadata = {
 export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const realm = await realmForHost((await headers()).get('host') ?? '');
+  const result = await serverComponentRealm(
+    (await headers()).get('host') ?? '',
+  );
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -22,9 +25,9 @@ export default async function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body>
-        {realm.publishableKey ? (
+        {result.ok ? (
           <ClerkProvider
-            publishableKey={realm.publishableKey}
+            publishableKey={result.realm.publishableKey}
             appearance={{
               variables: {
                 colorBackground: 'var(--theme-surface)',
@@ -43,7 +46,7 @@ export default async function RootLayout({
             {children}
           </ClerkProvider>
         ) : (
-          children
+          <RealmUnavailable />
         )}
       </body>
     </html>
