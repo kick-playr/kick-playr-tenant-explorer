@@ -1,12 +1,11 @@
+import { BrandLogo } from '@/components/theme-logo';
 import { SignIn } from '@clerk/nextjs';
 export default function SignInPage() {
   return (
     <main className="setup-page">
       <div>
         <div className="sign-in-brand">
-          <span className="brand-mark">
-            k<span>.</span>
-          </span>
+          <BrandLogo priority />
           <h1>Tenant Explorer</h1>
           <p>Sign in with your platform operator account.</p>
         </div>

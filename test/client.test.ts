@@ -168,3 +168,140 @@ test('proxy admits tenant key inspection without admitting arbitrary file paths'
   );
   assert.equal(result.status, 200);
 });
+
+test('club proxy routes reach club endpoints without granting platform access', async () => {
+  let called = '';
+  const result = await proxyRequest(
+    new Request(
+      'http://localhost:3002/api/explorer/clubs/development/winikon/settings',
+    ),
+    ['clubs', 'development', 'winikon', 'settings'],
+    'session',
+    'http://127.0.0.1:3003',
+    async (url) => {
+      called = String(url);
+      return Response.json({ hash: 'one' });
+    },
+  );
+  assert.equal(result.status, 200);
+  assert.equal(
+    called,
+    'http://127.0.0.1:3003/api/club/tenants/development/winikon/settings',
+  );
+  const invalid = await proxyRequest(
+    new Request(
+      'http://localhost:3002/api/explorer/clubs/development/winikon/keys',
+    ),
+    ['clubs', 'development', 'winikon', 'keys'],
+    'session',
+    'http://127.0.0.1:3003',
+  );
+  assert.equal(invalid.status, 400);
+});
+
+test('club writes validate Origin against the public Host, not the internal Next URL or forwarded headers', async () => {
+  for (const [origin, host, status] of [
+    [
+      'http://fcrww.explorer.localhost:3002',
+      'fcrww.explorer.localhost:3002',
+      200,
+    ],
+    ['http://localhost:3002', 'fcrww.explorer.localhost:3002', 403],
+    ['https://foreign.example', 'fcrww.explorer.localhost:3002', 403],
+    ['https://foreign.example', 'fcrww.explorer.localhost:3002/path', 403],
+  ] as const) {
+    let dispatched = false;
+    const response = await proxyRequest(
+      new Request(
+        'http://localhost:3002/api/explorer/clubs/development/fcrww/integrations/bexio/connect',
+        {
+          method: 'POST',
+          headers: {
+            host,
+            origin,
+            'x-forwarded-host': 'foreign.example',
+            'content-type': 'application/json',
+          },
+          body: '{}',
+        },
+      ),
+      ['clubs', 'development', 'fcrww', 'integrations', 'bexio', 'connect'],
+      'verified-session',
+      'http://127.0.0.1:3003',
+      async () => {
+        dispatched = true;
+        return Response.json({ url: 'https://auth.bexio.com/' });
+      },
+    );
+    assert.equal(response.status, status);
+    assert.equal(dispatched, status === 200);
+  }
+});
+
+test('club catalog bridge exposes label mappings but refuses operational team routes and flags', async () => {
+  const calls: string[] = [];
+  const transport: typeof fetch = async (url) => {
+    calls.push(String(url));
+    return Response.json({ id: 'catalog', hash: 'one', items: [] });
+  };
+  for (const suffix of [
+    'catalog/categories',
+    'catalog/branches/flags/isTrial',
+  ]) {
+    const path = `clubs/development/fcrww/${suffix}`;
+    const request = new Request(
+      `http://fcrww.explorer.localhost:3002/api/explorer/${path}`,
+      {
+        method: suffix.includes('flags') ? 'PUT' : 'GET',
+        ...(suffix.includes('flags')
+          ? {
+              headers: {
+                origin: 'http://fcrww.explorer.localhost:3002',
+                'content-type': 'application/json',
+              },
+              body: JSON.stringify({ expectedHash: 'one', selectors: [] }),
+            }
+          : {}),
+      },
+    );
+    assert.equal(
+      (
+        await proxyRequest(
+          request,
+          path.split('/'),
+          'synthetic-token',
+          'http://localhost:3003',
+          transport,
+        )
+      ).status,
+      200,
+    );
+  }
+  for (const suffix of [
+    'catalog/categories/teams',
+    'catalog/categories/coaches1418',
+    'catalog/branches/player-trainers',
+    'catalog/categories/flags/isTeam',
+    'catalog/categories/flags/isAdmin',
+    'catalog/branches/flags/isKiosk',
+  ]) {
+    const path = `clubs/development/fcrww/${suffix}`;
+    assert.equal(
+      (
+        await proxyRequest(
+          new Request('http://localhost:3002'),
+          path.split('/'),
+          'synthetic-token',
+          'http://localhost:3003',
+          transport,
+        )
+      ).status,
+      400,
+    );
+  }
+  assert.equal(calls.length, 2);
+  assert.equal(
+    calls[1],
+    'http://localhost:3003/api/club/tenants/development/fcrww/catalog/branches/flags/isTrial',
+  );
+});

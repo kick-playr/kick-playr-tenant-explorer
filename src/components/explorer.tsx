@@ -1,5 +1,6 @@
 'use client';
 
+import { BrandLogo } from './theme-logo';
 import Link from 'next/link';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
@@ -132,12 +133,7 @@ export function Explorer({
           href="/"
           aria-label="Kick Playr Tenant Explorer"
         >
-          <span className="brand-mark">
-            k<span>.</span>
-          </span>
-          <span>
-            KICK PLAYR<small>Platform console</small>
-          </span>
+          <BrandLogo priority />
         </Link>
         <div className="sidebar-label">WORKSPACE</div>
         <div className="nav-active">
@@ -179,7 +175,7 @@ export function Explorer({
       <div className="workspace">
         <header className="topbar">
           <div className="breadcrumb">
-            Workspace <span>/</span> <strong>Tenants</strong>
+            Platform directory <span>/</span> <strong>Tenants</strong>
           </div>
           <div className="account">
             <ThemeSwitcher />
@@ -192,13 +188,10 @@ export function Explorer({
         </header>
         <main>
           <div className="page-heading">
-            <div>
-              <div className="eyebrow">PLATFORM DIRECTORY</div>
-              <h1>
-                Tenant explorer<span>.</span>
-              </h1>
-              <p>Every club. One place to keep things running.</p>
-            </div>
+            <h1>
+              Tenant explorer<span>.</span>
+            </h1>
+            <p>Every club. One place to keep things running.</p>
             <button
               className="button primary"
               disabled={saving}

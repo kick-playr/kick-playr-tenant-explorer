@@ -4,13 +4,22 @@ import {
   type NextRequest,
   type NextFetchEvent,
 } from 'next/server';
-const middleware = clerkMiddleware();
-export default function proxy(request: NextRequest, event: NextFetchEvent) {
-  if (
-    !process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
-    !process.env.CLERK_SECRET_KEY
-  )
-    return NextResponse.next();
-  return middleware(request, event);
+import { realmForHost } from './lib/server-realms';
+export default async function proxy(
+  request: NextRequest,
+  event: NextFetchEvent,
+) {
+  const realm = await realmForHost(request.headers.get('host') ?? '');
+  if (!realm.publishableKey || !realm.secretKey)
+    return new NextResponse('Explorer authentication unavailable', {
+      status: 503,
+    });
+  return clerkMiddleware(
+    () => NextResponse.next(),
+    () => ({
+      publishableKey: realm.publishableKey,
+      secretKey: realm.secretKey,
+    }),
+  )(request, event);
 }
 export const config = { matcher: ['/', '/sign-in(.*)', '/api/explorer(.*)'] };

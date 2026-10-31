@@ -1,3 +1,4 @@
+import { BEXIO_MAPPING_GROUPS } from './bexio-tag-mappings';
 /** Server-side, fixed-upstream bridge. It never accepts upstream credentials from the browser. */
 export async function proxyRequest(
   request: Request,
@@ -13,13 +14,34 @@ export async function proxyRequest(
     );
   if (!token) return fail(401, 'Sign in to the tenant explorer');
   const path = segments.join('/');
+  const club =
+    /^clubs(?:\/(development|test|preview|production)\/[a-z0-9][a-z0-9-]{0,63}\/(?:catalog\/(?:categories|branches)(?:\/flags\/[A-Za-z][A-Za-z0-9]{0,63})?|branding|settings|integrations(?:\/[a-z0-9][a-z0-9-]{0,63}(?:\/connect)?)?))?$/.test(
+      path,
+    );
   if (
     segments.some((x) => !/^[A-Za-z0-9_-]{1,128}$/.test(x)) ||
-    !/^tenants(?:\/(development|test|preview|production)\/[a-z0-9][a-z0-9-]{0,63}(?:\/(?:audit|keys|(?:users|credentials|integrations)\/[A-Za-z0-9_-]{1,128}))?)?$/.test(
-      path,
+    !(
+      club ||
+      path === 'access' ||
+      /^tenants(?:\/(development|test|preview|production)\/[a-z0-9][a-z0-9-]{0,63}(?:\/(?:audit|keys|(?:users|credentials|integrations)\/[A-Za-z0-9_-]{1,128}))?)?$/.test(
+        path,
+      )
     )
   )
     return fail(400, 'Invalid explorer route');
+  const catalogFlag =
+    /^clubs\/[^/]+\/[^/]+\/catalog\/(categories|branches)\/flags\/([^/]+)$/.exec(
+      path,
+    );
+  if (
+    catalogFlag &&
+    !BEXIO_MAPPING_GROUPS.some(
+      (group) =>
+        group.collection === catalogFlag[1] &&
+        group.fields.some((field) => field.key === catalogFlag[2]),
+    )
+  )
+    return fail(400, 'Invalid Bexio label mapping');
   let upstream: URL;
   try {
     upstream = new URL(origin);
@@ -39,8 +61,21 @@ export async function proxyRequest(
   }
   const incoming = new URL(request.url);
   const mutation = !['GET', 'HEAD'].includes(request.method);
-  if (mutation && request.headers.get('origin') !== incoming.origin)
-    return fail(403, 'Write requests must come from this explorer');
+  if (mutation) {
+    // Next can use its internal listener address in request.url. The browser's
+    // authority is Host; never take it from client-supplied forwarded headers.
+    const host = request.headers.get('host') ?? incoming.host;
+    let publicOrigin: string;
+    try {
+      const publicUrl = new URL(`${incoming.protocol}//${host}`);
+      if (publicUrl.host !== host.toLowerCase()) throw Error();
+      publicOrigin = publicUrl.origin;
+    } catch {
+      return fail(403, 'Write requests must come from this explorer');
+    }
+    if (request.headers.get('origin') !== publicOrigin)
+      return fail(403, 'Write requests must come from this explorer');
+  }
   if (
     mutation &&
     !request.headers.get('content-type')?.startsWith('application/json')
@@ -51,7 +86,7 @@ export async function proxyRequest(
     return fail(413, 'Request exceeds 64KB');
   try {
     const response = await transport(
-      `${upstream.origin}/api/platform/${path}${incoming.search}`,
+      `${upstream.origin}${path === 'access' ? '/api/explorer/access' : club ? '/api/club/tenants' + path.slice(5) : '/api/platform/' + path}${incoming.search}`,
       {
         method: request.method,
         body: bytes,
