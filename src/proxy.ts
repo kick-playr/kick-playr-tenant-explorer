@@ -4,16 +4,19 @@ import {
   type NextRequest,
   type NextFetchEvent,
 } from 'next/server';
-import { realmForHost } from './lib/server-realms';
+import { resolveRealm } from './lib/server-realms';
+import { realmUnavailableResponse } from './lib/realm-unavailable';
 export default async function proxy(
   request: NextRequest,
   event: NextFetchEvent,
 ) {
-  const realm = await realmForHost(request.headers.get('host') ?? '');
-  if (!realm.publishableKey || !realm.secretKey)
-    return new NextResponse('Explorer authentication unavailable', {
-      status: 503,
-    });
+  const result = await resolveRealm(request.headers.get('host') ?? '');
+  if (!result.ok)
+    return realmUnavailableResponse(
+      request.nextUrl.pathname.startsWith('/api/') ? 'json' : 'html',
+      result.error,
+    );
+  const realm = result.realm;
   return clerkMiddleware(
     () => NextResponse.next(),
     () => ({

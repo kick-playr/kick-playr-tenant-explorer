@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server';
 import { proxyRequest } from '@/lib/proxy';
-import { realmForHost } from '@/lib/server-realms';
+import { resolveRealm } from '@/lib/server-realms';
+import { realmUnavailableResponse } from '@/lib/realm-unavailable';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -8,12 +9,8 @@ async function handle(
   request: Request,
   context: { params: Promise<{ path: string[] }> },
 ) {
-  const realm = await realmForHost(request.headers.get('host') ?? '');
-  if (!realm.publishableKey || !realm.secretKey)
-    return Response.json(
-      { message: 'Configure Clerk on the explorer server' },
-      { status: 503 },
-    );
+  const result = await resolveRealm(request.headers.get('host') ?? '');
+  if (!result.ok) return realmUnavailableResponse('json', result.error);
   const session = await auth();
   if (!session.userId)
     return Response.json(
