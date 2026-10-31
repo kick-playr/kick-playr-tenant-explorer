@@ -263,3 +263,95 @@ test('credential, integration and user forms call their real management routes',
   ]);
   await screen.findByText('Changes saved.');
 });
+
+test('tenant administrator checkbox fills required permissions and preserves other grants when unchecked', async () => {
+  let body: Record<string, unknown> | undefined;
+  const request: Transport = async (path, options) => {
+    if (options?.method) {
+      body = JSON.parse(String(options.body));
+      return { ...tenant, configRevision: 5 };
+    }
+    return path.includes('?')
+      ? { items: [tenant], total: 1, page: 1, pageSize: 20 }
+      : tenant;
+  };
+  render(<Explorer request={request} />);
+  fireEvent.click(await screen.findByRole('button', { name: /FC Winikon/ }));
+  await screen.findByRole('tab', { name: 'Users' });
+  fireEvent.click(screen.getByRole('tab', { name: 'Users' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Add user' }));
+  const permissions = screen.getByLabelText(
+    'Tenant permissions',
+  ) as HTMLTextAreaElement;
+  fireEvent.change(permissions, { target: { value: 'club:teams:write' } });
+  const admin = screen.getByRole('checkbox', { name: 'Tenant administrator' });
+  fireEvent.click(admin);
+  assert.ok(permissions.value.includes('club:settings:write'));
+  assert.ok(permissions.value.includes('club:actions:oauth:state'));
+  assert.ok(permissions.value.includes('club:integrations:use'));
+  assert.ok(permissions.value.includes('club:teams:write'));
+  fireEvent.click(admin);
+  assert.equal(permissions.value, 'club:teams:write');
+  fireEvent.change(permissions, { target: { value: 'club:*:*' } });
+  assert.equal((admin as HTMLInputElement).checked, true);
+  fireEvent.change(screen.getByLabelText('Clerk subject'), {
+    target: { value: 'user_admin' },
+  });
+  fireEvent.change(screen.getByLabelText('Bexio contact ID'), {
+    target: { value: '23' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Save user access' }));
+  await waitFor(() => assert.deepEqual(body?.permissions, ['club:*:*']));
+  assert.equal(body?.expectedAuthorityRevision, tenant.authorityRevision);
+});
+
+test('user list marks active tenant administrators and excludes partial or revoked grants', async () => {
+  const { tenantAdministratorPermissions } =
+    await import('../src/lib/tenant-permissions.ts');
+  const users = [
+    {
+      subject: 'user_admin',
+      permissions: [...tenantAdministratorPermissions],
+      status: 'active' as const,
+    },
+    {
+      subject: 'user_partial',
+      permissions: ['club:settings:read'],
+      status: 'active' as const,
+    },
+    {
+      subject: 'user_revoked',
+      permissions: [...tenantAdministratorPermissions],
+      status: 'revoked' as const,
+    },
+  ].map((u) => ({
+    ...u,
+    issuer: tenant.identityRealm,
+    contactId: 23,
+    revision: 1,
+  }));
+  const current = { ...tenant, users };
+  const request: Transport = async (path) =>
+    path.includes('?')
+      ? { items: [current], total: 1, page: 1, pageSize: 20 }
+      : current;
+  render(<Explorer request={request} />);
+  fireEvent.click(
+    await screen.findByRole('button', { name: /Open FC Winikon/ }),
+  );
+  fireEvent.click(await screen.findByRole('tab', { name: 'Users' }));
+  assert.equal(screen.getAllByText('Tenant administrator').length, 1);
+  assert.ok(
+    screen
+      .getByText('user_admin')
+      .closest('article')
+      ?.textContent?.includes('Tenant administrator'),
+  );
+  for (const subject of ['user_partial', 'user_revoked'])
+    assert.ok(
+      !screen
+        .getByText(subject)
+        .closest('article')
+        ?.textContent?.includes('Tenant administrator'),
+    );
+});

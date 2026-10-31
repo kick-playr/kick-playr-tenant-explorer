@@ -1,33 +1,39 @@
 import type { Metadata } from 'next';
 import { ClerkProvider } from '@clerk/nextjs';
 import './globals.css';
-import { themeInitScript } from '@/lib/theme';
+import { themeCss, themeInitScript } from '@/lib/theme';
+import { headers } from 'next/headers';
+import { realmForHost } from '@/lib/server-realms';
 
 export const metadata: Metadata = {
   title: 'Tenant Explorer · Kick Playr',
   description: 'Kick Playr platform administration for club tenants.',
   robots: { index: false, follow: false },
 };
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const realm = await realmForHost((await headers()).get('host') ?? '');
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <style>{themeCss}</style>
+
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body>
-        {process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ? (
+        {realm.publishableKey ? (
           <ClerkProvider
+            publishableKey={realm.publishableKey}
             appearance={{
               variables: {
-                colorBackground: 'var(--theme-surface, #ffffff)',
+                colorBackground: 'var(--theme-surface)',
                 colorForeground: 'var(--ink)',
                 colorMutedForeground: 'var(--muted)',
                 colorPrimary: 'var(--green)',
-                colorInput: 'var(--theme-surface, #ffffff)',
+                colorInput: 'var(--theme-surface)',
                 colorInputForeground: 'var(--ink)',
-                colorPrimaryForeground: 'var(--theme-button-ink, #ffffff)',
+                colorPrimaryForeground: 'var(--theme-button-ink)',
               },
             }}
             signInUrl="/sign-in"

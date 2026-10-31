@@ -28,6 +28,10 @@ import {
 } from './ui';
 import { ManagerInvitations } from './manager-invitations';
 import { TenantKeys } from './tenant-keys';
+import {
+  tenantAdministratorPermissions,
+  hasTenantAdministratorPermissions,
+} from '../lib/tenant-permissions';
 
 const tabs = [
   'Overview',
@@ -87,6 +91,9 @@ export function TenantEditor({
           body: JSON.stringify({
             ...body,
             expectedRevision: tenant.configRevision,
+            ...(suffix.startsWith('/users/')
+              ? { expectedAuthorityRevision: tenant.authorityRevision }
+              : {}),
           }),
         },
       )) as Tenant;
@@ -584,6 +591,15 @@ export function TenantEditor({
                         <div className="record-title">
                           <code>{user.subject}</code>
                           <Badge value={user.status} />
+                          {user.status === 'active' &&
+                            user.issuer === tenant.identityRealm &&
+                            hasTenantAdministratorPermissions(
+                              user.permissions,
+                            ) && (
+                              <span className="badge badge-enabled">
+                                Tenant administrator
+                              </span>
+                            )}
                         </div>
                         <p>
                           Contact #{user.contactId} <span>·</span>{' '}
@@ -938,6 +954,14 @@ function UserForm({
   mutate: Mutate;
   onDirty: () => void;
 }) {
+  const [permissions, setPermissions] = useState(
+    existing?.permissions.join('\n') ?? '',
+  );
+  const entries = permissions
+    .split(/\r?\n/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const administrator = hasTenantAdministratorPermissions(entries);
   return (
     <SaveForm
       busy={busy}
@@ -986,15 +1010,45 @@ function UserForm({
           </select>
         </Field>
       </div>
+      <label className="checkbox-field">
+        <input
+          type="checkbox"
+          checked={administrator}
+          onChange={(event) => {
+            setPermissions(
+              event.target.checked
+                ? [
+                    ...new Set([...entries, ...tenantAdministratorPermissions]),
+                  ].join('\n')
+                : entries
+                    .filter(
+                      (p) =>
+                        p !== 'club:*:*' &&
+                        !tenantAdministratorPermissions.some(
+                          (required) => required === p,
+                        ),
+                    )
+                    .join('\n'),
+            );
+            onDirty();
+          }}
+        />
+        Tenant administrator
+      </label>
+      <p className="field-hint">
+        Adds the permissions needed for club settings, integration credentials
+        and OAuth. Existing Bexio administrator checks still apply.
+      </p>
       <Field
         label="Tenant permissions"
-        hint="One club:* permission per line. Platform privileges cannot be assigned here."
+        hint="One club permission per line. Use club:*:* for all currently supported club permissions in this tenant; platform privileges are excluded."
       >
         <textarea
           className="code-input"
           name="permissions"
           rows={6}
-          defaultValue={existing?.permissions.join('\n')}
+          value={permissions}
+          onChange={(event) => setPermissions(event.target.value)}
           placeholder={'club:teams:read\nclub:settings:read'}
         />
       </Field>
