@@ -333,3 +333,71 @@ test('proxy admits only bounded invitation management routes', async () => {
   );
   assert.equal(result.status, 400);
 });
+
+test('MongoDB provisioning URL uses only the fixed authenticated same-origin proxy route', async () => {
+  let calls = 0;
+  const body = JSON.stringify({
+    uri: 'mongodb://user:CANARY_SECRET@cluster.invalid/demo?tls=true&authSource=admin',
+    expectedRevision: 'a'.repeat(64),
+  });
+  const segments = [
+    'tenants',
+    'development',
+    'demo',
+    'onboarding',
+    'mongo-url',
+  ];
+  const transport = (async (url: RequestInfo | URL, options?: RequestInit) => {
+    calls++;
+    assert.equal(
+      String(url),
+      'http://127.0.0.1:3003/api/platform/tenants/development/demo/onboarding/mongo-url',
+    );
+    assert.equal(
+      new Headers(options?.headers).get('authorization'),
+      'Bearer token',
+    );
+    assert.equal(new TextDecoder().decode(options?.body as ArrayBuffer), body);
+    return Response.json({ configured: true, source: 'pending' });
+  }) as typeof fetch;
+  const make = (origin: string) =>
+    new Request('https://explorer.example/api/platform/' + segments.join('/'), {
+      method: 'POST',
+      headers: { origin, 'content-type': 'application/json' },
+      body,
+    });
+  const response = await proxyRequest(
+    make('https://explorer.example'),
+    segments,
+    'token',
+    'http://127.0.0.1:3003',
+    transport,
+  );
+  assert.equal(response.status, 200);
+  assert.ok(!JSON.stringify(await response.json()).includes('CANARY_SECRET'));
+  assert.equal(
+    (
+      await proxyRequest(
+        make('https://foreign.example'),
+        segments,
+        'token',
+        'http://127.0.0.1:3003',
+        transport,
+      )
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await proxyRequest(
+        make('https://explorer.example'),
+        [...segments, 'export'],
+        'token',
+        'http://127.0.0.1:3003',
+        transport,
+      )
+    ).status,
+    400,
+  );
+  assert.equal(calls, 1);
+});

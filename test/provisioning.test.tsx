@@ -9,6 +9,7 @@ import {
   cleanup,
   waitFor,
 } from '@testing-library/react';
+import type { MongoUrlStatus } from '../src/components/tenant-mongo-url.tsx';
 import { TenantProvisioning } from '../src/components/tenant-provisioning.tsx';
 import { CreateTenant } from '../src/components/create-tenant.tsx';
 test('tenant creation prefills stage-specific references and preserves explicit operator edits', () => {
@@ -107,6 +108,89 @@ test('operator checklist distinguishes manual acknowledgements from verified inf
     });
     assert.ok(screen.getByText('workflow-local:club:mongo'));
     assert.ok(screen.getByText(/HSM.*nicht verfügbar/));
+  } finally {
+    cleanup();
+  }
+});
+
+test('saving the MongoDB URL updates the setup revision and clears old readiness before the next checklist save', async () => {
+  const calls: { path: string; body: unknown }[] = [];
+  const status: MongoUrlStatus = {
+    configured: false,
+    editable: true,
+    available: true,
+    revision: 'a'.repeat(64),
+    source: null,
+    requiresReload: false,
+  };
+  let guide = {
+    onboardingRevision: 3,
+    steps: [],
+    references: {
+      mongoUri: 'workflow-local:demo:mongo',
+      key: 'workflow-local:demo:key',
+    },
+    operatorSteps: [],
+    verification: { verifiedAt: 'today', checks: { mongodb: 'verified' } } as {
+      verifiedAt: string;
+      checks: Record<string, string>;
+    } | null,
+    clerk: null,
+    keys: { files: [] },
+    emailConfigured: false,
+    mongo: status,
+  };
+  const request = async (path: string, options?: RequestInit) => {
+    if (!options) return guide;
+    const body = JSON.parse(String(options.body));
+    calls.push({ path, body });
+    if (path.endsWith('/mongo-url')) {
+      guide = {
+        ...guide,
+        onboardingRevision: 4,
+        verification: null,
+        mongo: {
+          ...status,
+          configured: true,
+          source: 'pending',
+          revision: 'b'.repeat(64),
+          onboardingRevision: 4,
+        },
+      };
+      return guide.mongo;
+    }
+    return {};
+  };
+  try {
+    render(
+      <TenantProvisioning
+        environment="development"
+        tenantId="demo"
+        request={request}
+      />,
+    );
+    const input = await screen.findByLabelText('MongoDB-URL');
+    fireEvent.change(input, {
+      target: {
+        value:
+          'mongodb://u:CANARY_SECRET@cluster.invalid/demo?tls=true&authSource=admin',
+      },
+    });
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'MongoDB-URL verschlüsselt speichern',
+      }),
+    );
+    await screen.findByText(/Verschlüsselt gespeichert/);
+    assert.ok(screen.getByText('Noch nicht serverseitig bestätigt.'));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Fortschritt speichern' }),
+    );
+    await waitFor(() => assert.ok(calls.some((c) => c.path.endsWith('/save'))));
+    assert.deepEqual(calls.find((c) => c.path.endsWith('/save'))?.body, {
+      steps: [],
+      expectedRevision: 4,
+    });
   } finally {
     cleanup();
   }

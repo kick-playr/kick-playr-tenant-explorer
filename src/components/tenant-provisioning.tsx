@@ -1,9 +1,15 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { TenantMongoUrl, type MongoUrlStatus } from './tenant-mongo-url';
+import {
+  ProvisioningChecklist,
+  type ProvisioningStep,
+} from './provisioning-checklist';
 import { tenantPath, type Transport } from '../lib/api';
 interface Guide {
   onboardingRevision: number;
-  steps: { id: string; title: string; instructions: string }[];
+  mongo?: MongoUrlStatus;
+  steps: ProvisioningStep[];
   references: { mongoUri: string; key: string };
   configuredReferences?: { mongoUri: string; key: string };
   operatorSteps: string[];
@@ -78,7 +84,7 @@ export function TenantProvisioning({
     } catch {
       setError(
         name === 'verify'
-          ? 'Prüfung fehlgeschlagen. Datenbank, zugeordnete Schlüssel, MANAGER_SETUP_CONTROL_KEY auf beiden APIs, Runtime-Verbindung und Plattform-SMTP prüfen. Es wurde keine Einladung gesendet.'
+          ? 'Prüfung fehlgeschlagen. Datenbank, zugeordnete Vereinsschlüssel, Runtime-Verbindung und Plattform-Konfiguration prüfen. Es wurde keine Einladung gesendet.'
           : 'Speichern fehlgeschlagen. Fortschritt neu laden und erneut versuchen.',
       );
     } finally {
@@ -114,32 +120,38 @@ export function TenantProvisioning({
             </dd>
           </dl>
           <p>
-            Private Werte direkt in serverseitige .env-/Deployment-Secrets
-            installieren. Hier werden nur Referenzen und Prüfstatus gespeichert.
+            Schlüssel und andere Umgebungswerte direkt in serverseitige
+            .env-/Deployment-Secrets installieren. Die MongoDB-URL kann hier
+            verschlüsselt gespeichert werden.
           </p>
-          <ol>
-            {guide.steps.map((step) => (
-              <li key={step.id}>
-                <h3>{step.title}</h3>
-                <p>{step.instructions}</p>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={steps.includes(step.id)}
-                    disabled={busy}
-                    onChange={(e) =>
-                      setSteps(
-                        e.target.checked
-                          ? [...steps, step.id]
-                          : steps.filter((id) => id !== step.id),
-                      )
+          <TenantMongoUrl
+            key={environment + '/' + tenantId}
+            status={guide.mongo}
+            save={async (uri, expectedRevision) => {
+              const result = (await request(path + '/mongo-url', {
+                method: 'POST',
+                body: JSON.stringify({ uri, expectedRevision }),
+              })) as MongoUrlStatus;
+              setGuide((current) =>
+                current
+                  ? {
+                      ...current,
+                      mongo: result,
+                      verification: null,
+                      onboardingRevision:
+                        result.onboardingRevision ?? current.onboardingRevision,
                     }
-                  />
-                  {step.title}: manuell erledigt
-                </label>
-              </li>
-            ))}
-          </ol>
+                  : current,
+              );
+              return result;
+            }}
+          />
+          <ProvisioningChecklist
+            steps={guide.steps}
+            checked={steps}
+            disabled={busy}
+            onChange={setSteps}
+          />
           {guide.clerk ? (
             <section>
               <h3>Clerk-Konfiguration</h3>

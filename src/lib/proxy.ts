@@ -1,5 +1,5 @@
 import { BEXIO_MAPPING_GROUPS } from './bexio-tag-mappings';
-/** Server-side, fixed-upstream bridge. It never accepts upstream credentials from the browser. */
+/** Server-side, fixed-upstream bridge. Browser input never selects the upstream API destination. */
 export async function proxyRequest(
   request: Request,
   segments: string[],
@@ -23,7 +23,7 @@ export async function proxyRequest(
     !(
       club ||
       path === 'access' ||
-      /^tenants(?:\/(development|test|preview|production)\/[a-z0-9][a-z0-9-]{0,63}(?:\/(?:audit|keys|onboarding(?:\/(?:save|verify))?|invitations(?:\/[A-Za-z0-9_-]{1,128}\/(?:resend|revoke|deliver|revoke-access))?|(?:users|credentials|integrations)\/[A-Za-z0-9_-]{1,128}))?)?$/.test(
+      /^tenants(?:\/(development|test|preview|production)\/[a-z0-9][a-z0-9-]{0,63}(?:\/(?:audit|keys|onboarding(?:\/(?:save|verify|mongo-url))?|invitations(?:\/[A-Za-z0-9_-]{1,128}\/(?:resend|revoke|deliver|revoke-access))?|(?:users|credentials|integrations)\/[A-Za-z0-9_-]{1,128}))?)?$/.test(
         path,
       )
     )
