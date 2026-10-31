@@ -401,3 +401,38 @@ test('MongoDB provisioning URL uses only the fixed authenticated same-origin pro
   );
   assert.equal(calls, 1);
 });
+
+test('key registration uses the fixed authenticated proxy route', async () => {
+  const path = [
+    'tenants',
+    'development',
+    'demo',
+    'onboarding',
+    'configure-keys',
+  ];
+  const result = await proxyRequest(
+    new Request('https://explorer.example/api/platform/' + path.join('/'), {
+      method: 'POST',
+      headers: {
+        origin: 'https://explorer.example',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ expectedRevision: 'a'.repeat(64) }),
+    }),
+    path,
+    'token',
+    'http://127.0.0.1:3003',
+    async (url, options) => {
+      assert.equal(
+        String(url),
+        'http://127.0.0.1:3003/api/platform/' + path.join('/'),
+      );
+      assert.equal(
+        new Headers(options?.headers).get('authorization'),
+        'Bearer token',
+      );
+      return Response.json({ registered: true });
+    },
+  );
+  assert.equal(result.status, 200);
+});
