@@ -40,7 +40,14 @@ export async function GET(
     token,
     process.env.EXPLORER_API_ORIGIN ?? '',
   );
-  if (!response.ok) return new Response(null, { status: response.status });
+  if (!response.ok)
+    return new Response(null, {
+      status: response.status,
+      headers: {
+        'Cache-Control': 'no-store',
+        'X-Explorer-Branding-Stage': 'upstream',
+      },
+    });
   const body = await response.json();
   return brandingAssetResponse(body?.branding?.[variant]);
 }

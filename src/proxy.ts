@@ -25,4 +25,6 @@ export default async function proxy(
     }),
   )(request, event);
 }
-export const config = { matcher: ['/', '/sign-in(.*)', '/api/explorer(.*)'] };
+export const config = {
+  matcher: ['/', '/sign-in(.*)', '/api/explorer(.*)', '/api/club-branding/:path*'],
+};
