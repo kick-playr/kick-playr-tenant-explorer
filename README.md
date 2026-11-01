@@ -206,15 +206,23 @@ Targets are frozen in an encrypted operation-bound snapshot and permanently rese
 
 ## Server secrets from the local vault (APP-36)
 
-`SECRETS_KEYS_STRATEGY=LOCAL_KEYVAULT` in local `NODE_ENV=development` loads
-server Clerk secrets using application `explorer` in
-`LOCAL_KEYVAULT_BINDINGS_JSON`; exact scoped read-only bootstrap grants are in
-`LOCAL_KEYVAULT_AUTH_JSON`. `LOCAL_KEYVAULT_URL` defaults to
-`http://127.0.0.1:4000`. The process descriptor may contain only
-`CLERK_SECRET_KEY`, a canonical base64 32-byte `CLERK_ENCRYPTION_KEY`, and finite `EXPLORER_CLUB_<ID>_CLERK_SECRET_KEY` mappings.
-Published Clerk keys and origins remain non-secret deployment configuration.
-See the vault runtime-snapshot contract for version-pinned descriptor/digest
-shapes. No secret value belongs in tracked examples.
+Minimal local configuration is `NODE_ENV=development`,
+`SECRETS_KEYS_STRATEGY=LOCAL_KEYVAULT` and `LOCAL_KEYVAULT_AUTH_JSON` with exact
+scoped read-only grants. `LOCAL_KEYVAULT_URL` defaults to
+`http://127.0.0.1:4000`; `LOCAL_KEYVAULT_ENVIRONMENT` defaults to `development`.
+No local binding JSON or additional UI environment setting is required. The
+server runtime reads `GET /local/runtime-manifests/explorer` with its `_shared`
+grant, then loads the pinned atomic snapshot. An authorized operator publishes
+the reviewed manifest once through the vault's publisher workflow before
+starting the UI. Changes require publishing a reviewed manifest and restarting.
+`LOCAL_KEYVAULT_BINDINGS_JSON` remains an optional explicit legacy override;
+manifest failures never trigger a fallback.
+
+The process descriptor may contain only `CLERK_SECRET_KEY`, a canonical base64
+32-byte `CLERK_ENCRYPTION_KEY`, and finite `EXPLORER_CLUB_<ID>_CLERK_SECRET_KEY`
+mappings. Published Clerk keys and origins remain non-secret deployment
+configuration. Manifest descriptors pin immutable versions and binding digests;
+no secret value belongs in tracked examples.
 
 The Node instrumentation barrier loads required values before request handling;
 proxy and render runtimes independently await their server-only cached loader
