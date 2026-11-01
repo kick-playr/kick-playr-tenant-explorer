@@ -392,7 +392,17 @@ test('Marked for deletion filter sends deletion=only, resets pagination and uses
   );
   const select = screen.getByLabelText('Filter status');
   assert.ok(screen.getByRole('option', { name: 'Marked for deletion' }));
-  assert.deepEqual(Array.from((select as HTMLSelectElement).options, option => option.text), ['All statuses', 'provisioning', 'active', 'suspended', 'disabled', 'Marked for deletion']);
+  assert.deepEqual(
+    Array.from((select as HTMLSelectElement).options, (option) => option.text),
+    [
+      'All statuses',
+      'provisioning',
+      'active',
+      'suspended',
+      'disabled',
+      'Marked for deletion',
+    ],
+  );
   fireEvent.change(select, { target: { value: 'deleted' } });
   await screen.findByRole('button', { name: /Open Deleted Club/ });
   await screen.findByText('1–1 of 1');
@@ -416,7 +426,7 @@ test('Marked for deletion filter sends deletion=only, resets pagination and uses
   );
 });
 
-test('successful soft deletion and recovery refresh directory rows/counts immediately while keeping selected details', async () => {
+test('successful deletion clears details and recovery works after explicit deleted-filter selection', async () => {
   let current: Tenant = structuredClone(tenant);
   let operation: null | {
     id: string;
@@ -507,12 +517,22 @@ test('successful soft deletion and recovery refresh directory rows/counts immedi
     target: { value: 'development/winikon' },
   });
   fireEvent.click(screen.getByRole('button', { name: 'Delete tenant' }));
-  await screen.findByText(
-    'This tenant is read-only while marked for deletion.',
-  );
+  const welcome = await screen.findByRole('heading', {
+    name: 'A clear view of your platform.',
+  });
+  await waitFor(() => assert.equal(document.activeElement, welcome));
   await screen.findByText('0 tenants');
   assert.equal(screen.queryByRole('button', { name: /Open FC Winikon/ }), null);
-  assert.ok(screen.getByRole('heading', { level: 1, name: 'FC Winikon' }));
+  assert.equal(
+    screen.queryByRole('heading', { level: 1, name: 'FC Winikon' }),
+    null,
+  );
+  fireEvent.change(screen.getByLabelText('Filter status'), {
+    target: { value: 'deleted' },
+  });
+  fireEvent.click(
+    await screen.findByRole('button', { name: /Open FC Winikon/ }),
+  );
   fireEvent.click(
     await screen.findByRole('button', { name: 'Recover to disabled…' }),
   );
@@ -520,9 +540,12 @@ test('successful soft deletion and recovery refresh directory rows/counts immedi
     target: { value: 'development/winikon' },
   });
   fireEvent.click(screen.getByRole('button', { name: 'Recover to disabled' }));
+  await screen.findByRole('tab', { name: 'Overview' });
+  fireEvent.change(screen.getByLabelText('Filter status'), {
+    target: { value: '' },
+  });
   await screen.findByRole('button', { name: /Open FC Winikon/ });
   await screen.findByText('1–1 of 1');
-  await screen.findByRole('tab', { name: 'Overview' });
   assert.equal(
     screen.queryByText('This tenant is read-only while marked for deletion.'),
     null,
