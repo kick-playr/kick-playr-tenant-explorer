@@ -244,10 +244,10 @@ export function Explorer({
               }}
             >
               <option value="">All statuses</option>
-              <option value="deleted">Marked for deletion</option>
               {statuses.map((s) => (
                 <option key={s}>{s}</option>
               ))}
+              <option value="deleted">Marked for deletion</option>
             </select>
           </div>
           <div
@@ -380,7 +380,11 @@ export function Explorer({
                     onBusyChange={setSaving}
                     dirty={dirty}
                     setDirty={setDirty}
-                    onReload={() => void open(selected)}
+                    onReload={() => {
+                      setPage(1);
+                      setRefresh((n) => n + 1);
+                      void open(selected);
+                    }}
                   />
                 ) : (
                   <div className="detail-loading" role="status">
