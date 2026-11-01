@@ -1,4 +1,3 @@
-import { clerkMiddleware } from '@clerk/nextjs/server';
 import {
   NextResponse,
   type NextRequest,
@@ -17,6 +16,7 @@ export default async function proxy(
       result.error,
     );
   const realm = result.realm;
+  const { clerkMiddleware } = await import('@clerk/nextjs/server');
   return clerkMiddleware(
     () => NextResponse.next(),
     () => ({

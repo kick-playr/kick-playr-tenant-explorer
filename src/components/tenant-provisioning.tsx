@@ -12,6 +12,8 @@ interface KeySetupStatus {
   registered: boolean;
   revision: string | null;
   local: {
+    strategy?: 'ENV_VARIABLES' | 'LOCAL_KEYVAULT';
+    requiresRestart?: boolean;
     status: string;
     files: { kind: string; variable?: string; status: string }[];
   } | null;
@@ -168,9 +170,9 @@ export function TenantProvisioning({
             </dd>
           </dl>
           <p>
-            Schlüssel und andere Umgebungswerte direkt in serverseitige
-            .env-/Deployment-Secrets installieren. Die MongoDB-URL kann hier
-            verschlüsselt gespeichert werden.
+            {guide.keySetup?.local?.strategy === 'LOCAL_KEYVAULT'
+              ? 'Alle Schlüssel und Zugangsdaten im lokalen Key Vault bereitstellen. Exakte Versionen zuordnen und beide APIs nach Änderungen neu starten. Diese Ansicht erzeugt oder importiert keine Schlüssel.'
+              : 'Schlüssel und andere Umgebungswerte direkt in serverseitige .env-/Deployment-Secrets installieren. Die MongoDB-URL kann hier verschlüsselt gespeichert werden.'}
           </p>
           <TenantMongoUrl
             key={environment + '/' + tenantId}
@@ -280,10 +282,9 @@ export function TenantProvisioning({
                 : 'Schlüsselzuordnung noch nicht registriert.'}
             </p>
             <p>
-              Die Prüfung vergleicht die drei Schlüssel in Tenant-API und
-              Runtime-API und speichert nur ihre Variablennamen. Eine
-              vollständige Runtime-Registrierung ist dafür noch nicht
-              erforderlich.
+              {guide.keySetup?.local?.strategy === 'LOCAL_KEYVAULT'
+                ? 'Die Prüfung vergleicht die geladenen, versionierten Vault-Zuordnungen beider APIs. Änderungen oder neue Tenants benötigen einen Neustart; die Prüfung lädt keine neuen Schlüssel.'
+                : 'Die Prüfung vergleicht die drei Schlüssel in Tenant-API und Runtime-API und speichert nur ihre Variablennamen. Eine vollständige Runtime-Registrierung ist dafür noch nicht erforderlich.'}
             </p>
             {guide.keySetup?.available && !guide.keySetup.editable ? (
               <p>Zuordnung nur vor der ersten Manager-Einladung möglich.</p>
@@ -304,13 +305,17 @@ export function TenantProvisioning({
             >
               Schlüssel konfigurieren
             </button>
-            <p>
-              Vorlage für serverseitige Secret-Variablen (Platzhalter ersetzen;
-              vorhandene Werte behalten):
-            </p>
-            <pre tabIndex={0} aria-label="Serverseitige Secret-Variablen">
-              {guide.environmentSnippet}
-            </pre>
+            {guide.keySetup?.local?.strategy !== 'LOCAL_KEYVAULT' && (
+              <p>
+                Vorlage für serverseitige Secret-Variablen (Platzhalter
+                ersetzen; vorhandene Werte behalten):
+              </p>
+            )}
+            {guide.keySetup?.local?.strategy !== 'LOCAL_KEYVAULT' && (
+              <pre tabIndex={0} aria-label="Serverseitige Secret-Variablen">
+                {guide.environmentSnippet}
+              </pre>
+            )}
             <p>
               HSM/KMS ist mit dem aktuellen Adapter nicht verfügbar. Nicht
               exportierbare Schlüssel bleiben im Provider.

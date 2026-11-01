@@ -62,6 +62,17 @@ export async function realmForHost(
   request: typeof fetch = fetch,
 ): Promise<ServerRealm> {
   if (
+    env === process.env &&
+    env.SECRETS_KEYS_STRATEGY !== undefined &&
+    env.SECRETS_KEYS_STRATEGY !== 'ENV_VARIABLES'
+  ) {
+    try {
+      env = await (await import('./server-secrets')).serverSecrets();
+    } catch {
+      throw new RealmConfigurationError('credentials');
+    }
+  }
+  if (
     host.length > 253 ||
     !/^[a-z0-9][a-z0-9.-]*(?::[1-9][0-9]{0,4})?$/.test(host)
   )
