@@ -19,6 +19,7 @@ export interface DeletionStatus {
   recoveryAvailable: boolean;
   inventory: {
     complete: boolean;
+    controlOnly?: boolean;
     revision: string;
     targets: { id: string; label: string }[];
     reason?: string;

@@ -26,7 +26,11 @@ export function TenantDeletion({
     [mode, setMode] = useState<'remove' | 'recover' | 'purge' | null>(null),
     [confirmation, setConfirmation] = useState(''),
     [completed, setCompleted] = useState<string[]>([]),
-    [allDone, setAllDone] = useState(false);
+    [allDone, setAllDone] = useState(false),
+    [ownershipConfirmed, setOwnershipConfirmed] = useState(false),
+    [unregisteredResourcesConfirmed, setUnregisteredResourcesConfirmed] =
+      useState(false),
+    [controlOnlyConfirmed, setControlOnlyConfirmed] = useState(false);
   const path = `${tenantPath(environment, tenantId)}/deletion`,
     identity = `${environment}/${tenantId}`;
   const load = useCallback(
@@ -63,6 +67,9 @@ export function TenantDeletion({
     setConfirmation('');
     setCompleted([]);
     setAllDone(false);
+    setOwnershipConfirmed(false);
+    setUnregisteredResourcesConfirmed(false);
+    setControlOnlyConfirmed(false);
   };
   function open(next: typeof mode) {
     reset();
@@ -95,6 +102,11 @@ export function TenantDeletion({
             ? {
                 completed,
                 allDone,
+                ownershipConfirmed,
+                unregisteredResourcesConfirmed,
+                controlOnly:
+                  state.inventory.controlOnly ??
+                  state.inventory.targets.length === 0,
                 expectedInventoryRevision: state.inventory.revision,
               }
             : {}),
@@ -125,6 +137,12 @@ export function TenantDeletion({
     confirmation === identity &&
     (mode !== 'purge' ||
       (allDone &&
+        ownershipConfirmed &&
+        unregisteredResourcesConfirmed &&
+        (!(
+          state.inventory.controlOnly ?? state.inventory.targets.length === 0
+        ) ||
+          controlOnlyConfirmed) &&
         completed.length === state.checklist.length &&
         state.inventory.complete)),
   );
@@ -145,7 +163,7 @@ export function TenantDeletion({
               <p>
                 <strong>
                   {op.phase === 'purged'
-                    ? 'All verified database targets deleted'
+                    ? 'Registered tenant databases and tenant control records deleted'
                     : op.phase === 'failed'
                       ? 'Cleanup incomplete'
                       : op.phase === 'purging'
@@ -165,7 +183,7 @@ export function TenantDeletion({
               <p>
                 Operation <code>{op.id}</code>
               </p>
-              {op.error ? <Notice>{op.error}</Notice> : null}
+              {op.error ? <Notice error>{op.error}</Notice> : null}
               {op.targets.length > 0 && (
                 <ul>
                   {op.targets.map((t) => (
@@ -187,11 +205,12 @@ export function TenantDeletion({
           {op?.phase !== 'purged' && (
             <>
               <p>
-                Database cleanup requires a complete operator-verified
-                inventory. Shared and unverified resources are protected.
+                Registered tenant databases are derived from authenticated
+                runtime configuration. Confirm their exclusive ownership before
+                permanent deletion. Shared resources remain protected.
               </p>
               {state.inventory.reason && (
-                <Notice>{state.inventory.reason}</Notice>
+                <Notice error>{state.inventory.reason}</Notice>
               )}
               <ul>
                 {state.inventory.targets.map((t) => (
@@ -247,6 +266,7 @@ export function TenantDeletion({
               disabled={busy}
               onClick={() => {
                 setError(undefined);
+                reset();
                 load().catch(setError);
               }}
             >
@@ -302,10 +322,54 @@ export function TenantDeletion({
               ) : (
                 <>
                   <p>
-                    This permanently deletes every verified database target,
-                    even during the recovery period. Recovery will end
-                    immediately. Retain the minimal deletion audit.
+                    Delete registered tenant databases and tenant control
+                    records
                   </p>
+                  <p>
+                    Permanent deletion is available anytime. Recovery ends
+                    immediately. A minimal deletion audit and identity
+                    reservations remain.
+                  </p>
+                  <ul>
+                    {state.inventory.targets.map((target) => (
+                      <li key={target.id}>{target.label}</li>
+                    ))}
+                  </ul>
+                  <label className="checkbox-field">
+                    <input
+                      type="checkbox"
+                      checked={ownershipConfirmed}
+                      onChange={(e) => setOwnershipConfirmed(e.target.checked)}
+                    />
+                    I confirm the displayed registered databases and tenant
+                    control records belong exclusively to this tenant.
+                  </label>
+                  <label className="checkbox-field">
+                    <input
+                      type="checkbox"
+                      checked={unregisteredResourcesConfirmed}
+                      onChange={(e) =>
+                        setUnregisteredResourcesConfirmed(e.target.checked)
+                      }
+                    />
+                    I confirm unregistered databases, external infrastructure
+                    and shared resources have been handled manually without
+                    deleting others’ data.
+                  </label>
+                  {(state.inventory.controlOnly ??
+                    state.inventory.targets.length === 0) && (
+                    <label className="checkbox-field">
+                      <input
+                        type="checkbox"
+                        checked={controlOnlyConfirmed}
+                        onChange={(e) =>
+                          setControlOnlyConfirmed(e.target.checked)
+                        }
+                      />
+                      No registered tenant database is listed. Delete tenant
+                      control records only.
+                    </label>
+                  )}
                   <h3>Manual cleanup checklist</h3>
                   {state.checklist.map((item) => (
                     <label className="checkbox-field" key={item.id}>
@@ -324,8 +388,10 @@ export function TenantDeletion({
                     </label>
                   ))}
                   <p>
-                    The server will delete the verified database targets after
-                    this confirmation. Do not manually delete shared databases.
+                    The server deletes only the registered databases shown above
+                    and scoped tenant control records. Unregistered databases
+                    and infrastructure require manual cleanup. Shared databases
+                    are never dropped.
                   </p>
                   <label className="checkbox-field">
                     <input
@@ -333,9 +399,9 @@ export function TenantDeletion({
                       checked={allDone}
                       onChange={(e) => setAllDone(e.target.checked)}
                     />
-                    I confirm all manual cleanup steps are complete. Permanently
-                    delete this tenant now from every verified tenant-owned
-                    database. This cannot be undone.
+                    I confirm all manual cleanup steps are complete. Delete
+                    registered tenant databases and tenant control records now.
+                    This cannot be undone.
                   </label>
                 </>
               )}
