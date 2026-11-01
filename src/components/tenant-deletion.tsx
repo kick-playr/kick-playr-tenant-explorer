@@ -9,6 +9,7 @@ export function TenantDeletion({
   marked = false,
   request,
   onReload,
+  onDeleted,
   disabled = false,
   onBusyChange,
 }: {
@@ -17,6 +18,7 @@ export function TenantDeletion({
   marked?: boolean;
   request: Transport;
   onReload: () => void;
+  onDeleted?: () => void;
   disabled?: boolean;
   onBusyChange?: (busy: boolean) => void;
 }) {
@@ -84,36 +86,58 @@ export function TenantDeletion({
     setError(undefined);
     const action = mode;
     try {
-      await request(action === 'remove' ? path : `${path}/${action}`, {
-        method: 'POST',
-        body: JSON.stringify({
-          expectedRevision: state.expectedRevision,
-          confirmation,
-          ...(action === 'remove'
-            ? {
-                expectedAuthorityRevision: state.expectedAuthorityRevision,
-                expectedInvitationRevision: state.expectedInvitationRevision,
-              }
-            : {
-                operationId: state.operation!.id,
-                expectedOperationRevision: state.operation!.revision,
-              }),
-          ...(action === 'purge'
-            ? {
-                completed,
-                allDone,
-                ownershipConfirmed,
-                unregisteredResourcesConfirmed,
-                controlOnly:
-                  state.inventory.controlOnly ??
-                  state.inventory.targets.length === 0,
-                expectedInventoryRevision: state.inventory.revision,
-              }
-            : {}),
-        }),
-      });
+      const result = (await request(
+        action === 'remove' ? path : `${path}/${action}`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            expectedRevision: state.expectedRevision,
+            confirmation,
+            ...(action === 'remove'
+              ? {
+                  expectedAuthorityRevision: state.expectedAuthorityRevision,
+                  expectedInvitationRevision: state.expectedInvitationRevision,
+                }
+              : {
+                  operationId: state.operation!.id,
+                  expectedOperationRevision: state.operation!.revision,
+                }),
+            ...(action === 'purge'
+              ? {
+                  completed,
+                  allDone,
+                  ownershipConfirmed,
+                  unregisteredResourcesConfirmed,
+                  controlOnly:
+                    state.inventory.controlOnly ??
+                    state.inventory.targets.length === 0,
+                  expectedInventoryRevision: state.inventory.revision,
+                }
+              : {}),
+          }),
+        },
+      )) as Partial<DeletionStatus> | null;
       setMode(null);
       reset();
+      // Purge can return HTTP success with failed/in-progress cleanup.
+      // Remove returns the operation view without inventory, so use its phase
+      // directly rather than waiting for another status request.
+      const deletionCompleted =
+        (action === 'remove' && result?.operation?.phase === 'retained') ||
+        (action === 'purge' && result?.operation?.phase === 'purged');
+      if (deletionCompleted && onDeleted) {
+        onDeleted();
+        return;
+      }
+      if (
+        action === 'purge' &&
+        (result?.operation?.phase === 'failed' ||
+          result?.operation?.phase === 'purging') &&
+        'inventory' in result
+      ) {
+        setState(result as DeletionStatus);
+        return;
+      }
       try {
         await load();
       } catch (refreshError) {

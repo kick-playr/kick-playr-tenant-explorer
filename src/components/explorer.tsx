@@ -48,9 +48,14 @@ export function Explorer({
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editorEpoch, setEditorEpoch] = useState(0);
+  const [deletionNotice, setDeletionNotice] = useState('');
+  const editorGeneration = useRef(0);
+  const welcomeHeading = useRef<HTMLHeadingElement>(null);
   const detailRequest = useRef<AbortController | null>(null);
+  const listRequest = useRef<AbortController | null>(null);
   useEffect(() => {
     const controller = new AbortController();
+    listRequest.current = controller;
     const timeout = window.setTimeout(
       () => {
         setListLoading(true);
@@ -91,25 +96,43 @@ export function Explorer({
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
   }, [dirty]);
-  useEffect(() => () => detailRequest.current?.abort(), []);
+  useEffect(() => {
+    if (deletionNotice && !selected) welcomeHeading.current?.focus();
+  }, [deletionNotice, selected]);
+  useEffect(
+    () => () => {
+      editorGeneration.current++;
+      detailRequest.current?.abort();
+    },
+    [],
+  );
+  function invalidateEditor() {
+    detailRequest.current?.abort();
+    const generation = ++editorGeneration.current;
+    setEditorEpoch(generation);
+    return generation;
+  }
   async function open(summary: TenantSummary) {
     if (saving) return;
     if (dirty && !window.confirm('Discard unsaved changes?')) return;
-    detailRequest.current?.abort();
+    const generation = invalidateEditor();
     const controller = new AbortController();
     detailRequest.current = controller;
     setDirty(false);
     setSelected(summary);
     setTenant(null);
     setDetailError(undefined);
+    setDeletionNotice('');
     try {
       const detail = (await request(
         tenantPath(summary.environment, summary.id),
         { signal: controller.signal },
       )) as Tenant;
-      if (!controller.signal.aborted) setTenant(detail);
+      if (!controller.signal.aborted && generation === editorGeneration.current)
+        setTenant(detail);
     } catch (error) {
-      if (!controller.signal.aborted) setDetailError(error);
+      if (!controller.signal.aborted && generation === editorGeneration.current)
+        setDetailError(error);
     }
   }
   function updated(next: Tenant) {
@@ -126,6 +149,24 @@ export function Explorer({
         : previous,
     );
   }
+  function deleted() {
+    invalidateEditor();
+    listRequest.current?.abort();
+    setSelected(null);
+    setTenant(null);
+    setDetailError(undefined);
+    setDirty(false);
+    setSaving(false);
+    setList(null);
+    setListError(undefined);
+    setListLoading(true);
+    setPage(1);
+    setRefresh((n) => n + 1);
+    setDeletionNotice('Tenant deleted. Select another tenant to continue.');
+  }
+  // Every editor callback captures its generation. Late async completions from
+  // an unmounted editor must not restore selection or unlock a newer mutation.
+  const currentEditor = () => editorEpoch === editorGeneration.current;
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -199,7 +240,7 @@ export function Explorer({
               onClick={() => {
                 if (!dirty || window.confirm('Discard unsaved changes?')) {
                   setDirty(false);
-                  setEditorEpoch((n) => n + 1);
+                  invalidateEditor();
                   setCreating(true);
                 }
               }}
@@ -249,6 +290,9 @@ export function Explorer({
               ))}
               <option value="deleted">Marked for deletion</option>
             </select>
+          </div>
+          <div role="status" aria-live="polite">
+            {deletionNotice}
           </div>
           <div
             className={`directory-layout ${selected ? 'has-selection' : ''}`}
@@ -351,7 +395,7 @@ export function Explorer({
                   disabled={saving}
                   onClick={() => {
                     if (!dirty || window.confirm('Discard unsaved changes?')) {
-                      detailRequest.current?.abort();
+                      invalidateEditor();
                       setSelected(null);
                       setTenant(null);
                       setDirty(false);
@@ -376,11 +420,21 @@ export function Explorer({
                     key={`${selected.environment}/${selected.id}/${editorEpoch}`}
                     tenant={tenant}
                     request={request}
-                    onUpdated={updated}
-                    onBusyChange={setSaving}
+                    onUpdated={(next) => {
+                      if (currentEditor()) updated(next);
+                    }}
+                    onBusyChange={(busy) => {
+                      if (currentEditor()) setSaving(busy);
+                    }}
                     dirty={dirty}
-                    setDirty={setDirty}
+                    setDirty={(next) => {
+                      if (currentEditor()) setDirty(next);
+                    }}
+                    onDeleted={() => {
+                      if (currentEditor()) deleted();
+                    }}
                     onReload={() => {
+                      if (!currentEditor()) return;
                       setPage(1);
                       setRefresh((n) => n + 1);
                       void open(selected);
@@ -400,7 +454,9 @@ export function Explorer({
                   <span className="graphic-dot two" />
                 </div>
                 <div className="eyebrow">A HOME FOR EVERY CLUB</div>
-                <h2>A clear view of your platform.</h2>
+                <h2 ref={welcomeHeading} tabIndex={-1}>
+                  A clear view of your platform.
+                </h2>
                 <p>
                   Select a tenant to manage its domains, configuration,
                   connections and people.
@@ -431,12 +487,13 @@ export function Explorer({
           request={request}
           onClose={() => setCreating(false)}
           onCreated={(created) => {
-            detailRequest.current?.abort();
+            invalidateEditor();
             setCreating(false);
             setDirty(false);
             setSelected(created);
             setTenant(created);
             setDetailError(undefined);
+            setDeletionNotice('');
             setRefresh((n) => n + 1);
           }}
         />

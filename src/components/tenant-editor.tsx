@@ -61,6 +61,7 @@ export function TenantEditor({
   dirty,
   setDirty,
   onReload,
+  onDeleted,
 }: {
   tenant: Tenant;
   request: Transport;
@@ -69,6 +70,7 @@ export function TenantEditor({
   dirty: boolean;
   setDirty: (value: boolean) => void;
   onReload: () => void;
+  onDeleted?: () => void;
 }) {
   const [tab, setTab] = useState<Tab>('Overview');
   const [busy, setBusy] = useState(false);
@@ -144,6 +146,7 @@ export function TenantEditor({
           marked
           request={request}
           onReload={onReload}
+          onDeleted={onDeleted}
           onBusyChange={onBusyChange}
         />
         <Audit tenant={tenant} request={request} />
@@ -321,6 +324,7 @@ export function TenantEditor({
                 tenantId={tenant.id}
                 request={request}
                 onReload={onReload}
+                onDeleted={onDeleted}
                 disabled={busy || dirty}
                 onBusyChange={onBusyChange}
               />
