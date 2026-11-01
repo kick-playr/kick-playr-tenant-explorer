@@ -203,3 +203,40 @@ Permanent deletion is available anytime from the UI. Its exact scope is **Delete
 Complete the manual cleanup checklist, separately acknowledge exclusive ownership of displayed databases/control records and manual handling of unregistered resources, then check the final all-done checkbox and type exact `environment/tenantId`. Unknown databases, external infrastructure, backups, cache copies and in-flight provider work remain manual obligations; shared resources must remain protected.
 
 Targets are frozen in an encrypted operation-bound snapshot and permanently reserved before any drop. Progress is durable: refresh after a lost response and retry the same operation. Retries keep their original targets even after runtime bindings are pruned. Recovery ends as soon as purge starts. Completion covers the registered databases and scoped tenant control records, retaining minimal tombstone/audit/reservations. See the API README for backend scope and safety details.
+
+## Server secrets from the local vault (APP-36)
+
+`SECRETS_KEYS_STRATEGY=LOCAL_KEYVAULT` in local `NODE_ENV=development` loads
+server Clerk secrets using application `explorer` in
+`LOCAL_KEYVAULT_BINDINGS_JSON`; exact scoped read-only bootstrap grants are in
+`LOCAL_KEYVAULT_AUTH_JSON`. `LOCAL_KEYVAULT_URL` defaults to
+`http://127.0.0.1:4000`. The process descriptor may contain only
+`CLERK_SECRET_KEY`, a canonical base64 32-byte `CLERK_ENCRYPTION_KEY`, and finite `EXPLORER_CLUB_<ID>_CLERK_SECRET_KEY` mappings.
+Published Clerk keys and origins remain non-secret deployment configuration.
+See the vault runtime-snapshot contract for version-pinned descriptor/digest
+shapes. No secret value belongs in tracked examples.
+
+The Node instrumentation barrier loads required values before request handling;
+proxy and render runtimes independently await their server-only cached loader
+before calling Clerk. Build compilation does not fetch vault secrets. Values
+are not placed in browser configuration or shared tenant environment variables.
+Required failures stop startup/realm resolution; shell secrets never provide a
+fallback. Successful loads remain in memory until restart and do not expire
+when a later vault outage occurs. Rotation, binding changes and revocation of
+loaded values require restarting affected applications. There is no browser
+vault request, automatic provisioning or production/cloud activation here.
+
+Operator key views identify Local Key Vault metadata and pinned versions and
+explain restart recovery. Checking keys is read-only and cannot repair/import
+keys. ENV_VARIABLES stays the default and keeps existing setup instructions.
+
+The installed Clerk SDK captures its process request-encryption key at import.
+The loader installs only the process-owned platform Clerk and encryption keys
+before dynamic SDK imports; realm-specific Clerk keys remain in scoped maps.
+The shared encryption key must already exist in the vault; startup never
+generates one. It protects middleware-to-server SDK request data, not tenant
+record encryption.
+
+Optional `CLERK_MACHINE_SECRET_KEY` is also vault-owned. If omitted from the
+process descriptor, its ambient environment value is removed before Clerk SDK
+imports so machine credentials cannot silently fall back to .env.

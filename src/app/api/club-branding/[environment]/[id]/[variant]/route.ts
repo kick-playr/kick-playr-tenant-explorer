@@ -1,4 +1,3 @@
-import { auth } from '@clerk/nextjs/server';
 import { resolveRealm } from '@/lib/server-realms';
 import { realmUnavailableResponse } from '@/lib/realm-unavailable';
 import { proxyRequest } from '@/lib/proxy';
@@ -20,6 +19,7 @@ export async function GET(
     return new Response(null, { status: 404 });
   const result = await resolveRealm(request.headers.get('host') ?? '');
   if (!result.ok) return realmUnavailableResponse('empty', result.error);
+  const { auth } = await import('@clerk/nextjs/server');
   const session = await auth();
   if (!session.userId) return new Response(null, { status: 401 });
   let token: string | null;

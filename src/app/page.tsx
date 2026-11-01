@@ -1,5 +1,3 @@
-import { auth } from '@clerk/nextjs/server';
-import { UserButton } from '@clerk/nextjs';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { Explorer } from '@/components/explorer';
@@ -19,6 +17,8 @@ export default async function Page({
     (await headers()).get('host') ?? '',
   );
   if (!result.ok) return <RealmUnavailable />;
+  const { UserButton } = await import('@clerk/nextjs');
+  const { auth } = await import('@clerk/nextjs/server');
   const session = await auth();
   if (!session.userId) redirect('/sign-in');
   const response = await proxyRequest(

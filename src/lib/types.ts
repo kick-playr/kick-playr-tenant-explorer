@@ -81,13 +81,16 @@ export interface AuditEvent {
   at: string;
 }
 export interface TenantKeyFiles {
+  strategy?: 'ENV_VARIABLES' | 'LOCAL_KEYVAULT';
+  requiresRestart?: boolean;
   reference: string;
   status: 'connected' | 'unavailable' | 'unbound';
   profile?: string;
   version?: string;
   files: {
     kind: 'wrapping' | 'index' | 'control';
-    source?: 'file' | 'environment';
+    source?: 'file' | 'environment' | 'vault';
+    version?: string;
     filename?: string;
     path?: string;
     variable?: string;

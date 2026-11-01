@@ -1,6 +1,13 @@
 import { BrandLogo } from '@/components/theme-logo';
-import { SignIn } from '@clerk/nextjs';
-export default function SignInPage() {
+import { headers } from 'next/headers';
+import { serverComponentRealm } from '@/lib/server-component-realm';
+import { RealmUnavailable } from '@/components/realm-unavailable';
+export default async function SignInPage() {
+  const result = await serverComponentRealm(
+    (await headers()).get('host') ?? '',
+  );
+  if (!result.ok) return <RealmUnavailable />;
+  const { SignIn } = await import('@clerk/nextjs');
   return (
     <main className="setup-page">
       <div>

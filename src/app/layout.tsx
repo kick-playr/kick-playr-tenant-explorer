@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import { ClerkProvider } from '@clerk/nextjs';
 import './globals.css';
 import { themeCss, themeInitScript } from '@/lib/theme';
 import { headers } from 'next/headers';
@@ -17,6 +16,9 @@ export default async function RootLayout({
   const result = await serverComponentRealm(
     (await headers()).get('host') ?? '',
   );
+  const Provider = result.ok
+    ? (await import('@clerk/nextjs')).ClerkProvider
+    : undefined;
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -25,8 +27,8 @@ export default async function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body>
-        {result.ok ? (
-          <ClerkProvider
+        {result.ok && Provider ? (
+          <Provider
             publishableKey={result.realm.publishableKey}
             appearance={{
               variables: {
@@ -44,7 +46,7 @@ export default async function RootLayout({
             afterSignOutUrl="/"
           >
             {children}
-          </ClerkProvider>
+          </Provider>
         ) : (
           <RealmUnavailable />
         )}

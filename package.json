@@ -1,6 +1,6 @@
 {
   "name": "kick-playr-tenant-explorer",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "private": true,
   "type": "module",
   "engines": {
@@ -18,12 +18,14 @@
   "dependencies": {
     "@clerk/nextjs": "^7.9.23",
     "@heroicons/react": "^2.2.0",
+    "@kick-playr/local-key-vault": "git+https://github.com/kick-playr/key-vault-api.git#990a325fe795374c665279ec260dcca52db63c5d",
     "@tiptap/pm": "^3.32.2",
     "@tiptap/react": "^3.32.2",
     "@tiptap/starter-kit": "^3.32.2",
     "next": "16.4.3",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
