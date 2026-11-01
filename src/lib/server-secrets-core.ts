@@ -33,11 +33,12 @@ export function createServerSecretsLoader(
         throw unavailable();
       let runtime: SecretsRuntime | undefined;
       try {
-        // Bindings are server-owned non-secret descriptors, not incoming request data.
-        const bindings = JSON.parse(
-          environment.LOCAL_KEYVAULT_BINDINGS_JSON ?? '{}',
-        );
-        const secrets = bindings?.applications?.explorer?.request?.secrets;
+        runtime = await factory();
+        // Discover the finite server-owned mapping policy before loading values.
+        const application = environment.LOCAL_KEYVAULT_BINDINGS_JSON
+          ? JSON.parse(environment.LOCAL_KEYVAULT_BINDINGS_JSON)?.applications?.explorer
+          : await runtime.loadApplication('explorer');
+        const secrets = application?.request?.secrets;
         if (!Array.isArray(secrets) || !secrets.length || secrets.length > 100)
           throw unavailable();
         const names = secrets.map(
@@ -57,7 +58,6 @@ export function createServerSecretsLoader(
           new Set(names).size !== names.length
         )
           throw unavailable();
-        runtime = await factory();
         const loaded = await runtime.loadProcess('explorer', {
           allowedMappings: names,
           requiredMappings: [

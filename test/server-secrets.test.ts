@@ -167,3 +167,29 @@ test('vault mode discards an ambient Clerk machine secret and accepts only an ex
     );
   }
 });
+
+test('manifest-only startup derives finite Clerk mappings before loading values', async () => {
+  const mappings = {
+    CLERK_SECRET_KEY: 'sk_test_platform123',
+    CLERK_ENCRYPTION_KEY: Buffer.alloc(32, 9).toString('base64'),
+    EXPLORER_CLUB_EXAMPLE_CLERK_SECRET_KEY: 'sk_test_realm123',
+  };
+  const calls: string[] = [];
+  const load = createServerSecretsLoader({ NODE_ENV: 'development', SECRETS_KEYS_STRATEGY: 'LOCAL_KEYVAULT' }, () => ({
+    loadApplication: async (name: string) => {
+      calls.push(`manifest:${name}`);
+      return { request: { secrets: Object.keys(mappings).map(mapping => ({ mapping })) } };
+    },
+    loadProcess: async (name: string, policy: { allowedMappings: string[]; requiredMappings: string[] }) => {
+      calls.push(`snapshot:${name}`);
+      assert.deepEqual(policy.allowedMappings, Object.keys(mappings));
+      assert.ok(Object.keys(mappings).every(name => policy.requiredMappings.includes(name)));
+      return { strategy: 'LOCAL_KEYVAULT', mappings };
+    },
+    close() {},
+  }) as unknown as SecretsRuntime);
+  const loaded = await load();
+  assert.equal(loaded.EXPLORER_CLUB_EXAMPLE_CLERK_SECRET_KEY, mappings.EXPLORER_CLUB_EXAMPLE_CLERK_SECRET_KEY);
+  assert.deepEqual(calls, ['manifest:explorer', 'snapshot:explorer']);
+  assert.equal(await load(), loaded);
+});
