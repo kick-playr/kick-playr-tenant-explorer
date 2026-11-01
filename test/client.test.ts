@@ -436,3 +436,38 @@ test('key registration uses the fixed authenticated proxy route', async () => {
   );
   assert.equal(result.status, 200);
 });
+
+test('deletion proxy forwards only fixed tenant deletion actions with the signed-in session', async () => {
+  for (const action of ['', 'recover', 'purge']) {
+    const segments = [
+      'tenants',
+      'development',
+      'club',
+      'deletion',
+      ...(action ? [action] : []),
+    ];
+    let forwarded = '';
+    const response = await proxyRequest(
+      new Request('http://localhost:3002/api/explorer/' + segments.join('/'), {
+        method: 'POST',
+        headers: {
+          origin: 'http://localhost:3002',
+          'content-type': 'application/json',
+        },
+        body: '{}',
+      }),
+      segments,
+      'session',
+      'http://127.0.0.1:3003',
+      async (url) => {
+        forwarded = String(url);
+        return Response.json({ operation: { phase: 'retained' } });
+      },
+    );
+    assert.equal(response.status, 200);
+    assert.equal(
+      forwarded,
+      'http://127.0.0.1:3003/api/platform/' + segments.join('/'),
+    );
+  }
+});

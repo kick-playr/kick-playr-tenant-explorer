@@ -2519,3 +2519,9 @@ input[type='checkbox'] {
   }
   .provisioning-checklist-content h3 { align-items: start; font-size: 14px; }
 }
+
+.deletion-section { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--line); }
+.deletion-section p { margin: 12px 0; overflow-wrap: anywhere; }
+.deletion-section .checkbox-field { align-items: flex-start; margin: 16px 0; line-height: 1.5; }
+.button.danger { background: var(--color-danger-surface); color: var(--color-danger-text); border: 1px solid currentColor; }
+.button.danger:not(:disabled):hover { filter: brightness(.94); }

@@ -61,7 +61,8 @@ export function Explorer({
         });
         if (query) params.set('search', query);
         if (environment) params.set('environment', environment);
-        if (status) params.set('status', status);
+        if (status === 'deleted') params.set('deletion', 'only');
+        else if (status) params.set('status', status);
         request(`tenants?${params}`, { signal: controller.signal })
           .then((data) => {
             if (!controller.signal.aborted) setList(data as TenantList);
@@ -243,6 +244,7 @@ export function Explorer({
               }}
             >
               <option value="">All statuses</option>
+              <option value="deleted">Marked for deletion</option>
               {statuses.map((s) => (
                 <option key={s}>{s}</option>
               ))}
@@ -300,7 +302,7 @@ export function Explorer({
                       </div>
                       <p>{t.hostname}</p>
                       <div className="tenant-row-bottom">
-                        <Badge value={t.status} />
+                        <Badge value={t.deletionId ? 'deleted' : t.status} />
                         <span>{t.environment}</span>
                       </div>
                     </button>
