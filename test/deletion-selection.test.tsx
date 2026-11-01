@@ -157,14 +157,26 @@ function fixture({
     },
   };
 }
+// Flush asynchronous fixture completions before inspecting the next UI state.
+async function click(element: HTMLElement) {
+  await act(async () => {
+    fireEvent.click(element);
+  });
+}
+async function change(
+  element: HTMLElement,
+  value: Parameters<typeof fireEvent.change>[1],
+) {
+  await act(async () => {
+    fireEvent.change(element, value);
+  });
+}
 async function openAlpha() {
-  fireEvent.click(
-    await screen.findByRole('button', { name: /Open Club Alpha/ }),
-  );
+  await click(await screen.findByRole('button', { name: /Open Club Alpha/ }));
   await screen.findByRole('heading', { level: 1, name: 'Club Alpha' });
 }
 async function confirm(purge = false) {
-  fireEvent.click(
+  await click(
     await screen.findByRole('button', {
       name: purge ? 'Permanently delete…' : 'Delete tenant…',
     }),
@@ -176,11 +188,11 @@ async function confirm(purge = false) {
       /No registered tenant database is listed/,
       /I confirm all manual cleanup/,
     ])
-      fireEvent.click(screen.getByLabelText(label));
-  fireEvent.change(screen.getByLabelText('Type development/alpha'), {
+      await click(screen.getByLabelText(label));
+  await change(screen.getByLabelText('Type development/alpha'), {
     target: { value: 'development/alpha' },
   });
-  fireEvent.click(
+  await click(
     screen.getByRole('button', {
       name: purge ? 'Permanently delete now' : 'Delete tenant',
     }),
@@ -208,9 +220,7 @@ for (const marked of [false, true])
       'status',
     );
     assert.equal(f.reads, 1);
-    fireEvent.click(
-      await screen.findByRole('button', { name: /Open Club Beta/ }),
-    );
+    await click(await screen.findByRole('button', { name: /Open Club Beta/ }));
     await screen.findByRole('heading', { level: 1, name: 'Club Beta' });
   });
 for (const phase of ['failed', 'purging'])
@@ -250,10 +260,8 @@ test('cancel and rejected deletion retain the selected tenant', async () => {
   const f = fixture({ postFails: true });
   render(<Explorer request={f.request} />);
   await openAlpha();
-  fireEvent.click(
-    await screen.findByRole('button', { name: 'Delete tenant…' }),
-  );
-  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  await click(await screen.findByRole('button', { name: 'Delete tenant…' }));
+  await click(screen.getByRole('button', { name: 'Cancel' }));
   assert.equal(f.writes, 0);
   assert.ok(screen.getByRole('heading', { level: 1, name: 'Club Alpha' }));
   await confirm();
@@ -264,11 +272,9 @@ test('late detail response from a prior selection cannot overwrite the next tena
   const f = fixture();
   render(<Explorer request={f.request} />);
   f.delayDetail();
-  fireEvent.click(
-    await screen.findByRole('button', { name: /Open Club Alpha/ }),
-  );
+  await click(await screen.findByRole('button', { name: /Open Club Alpha/ }));
   await waitFor(() => assert.ok(f.detailSignal));
-  fireEvent.click(screen.getByRole('button', { name: /Open Club Beta/ }));
+  await click(screen.getByRole('button', { name: /Open Club Beta/ }));
   await screen.findByRole('heading', { level: 1, name: 'Club Beta' });
   // Reopen Alpha using a current response while its obsolete request ignores abort.
   // The old request must remain fenced even after deletion and another selection.
@@ -277,9 +283,7 @@ test('late detail response from a prior selection cannot overwrite the next tena
   await screen.findByRole('heading', {
     name: 'A clear view of your platform.',
   });
-  fireEvent.click(
-    await screen.findByRole('button', { name: /Open Club Beta/ }),
-  );
+  await click(await screen.findByRole('button', { name: /Open Club Beta/ }));
   await screen.findByRole('heading', { level: 1, name: 'Club Beta' });
   await act(async () => f.pendingDetail.resolve(alpha));
   assert.ok(f.detailSignal?.aborted);
@@ -290,7 +294,7 @@ test('a directory response started before deletion cannot resurrect its row', as
   render(<Explorer request={f.request} />);
   await openAlpha();
   f.delayList();
-  fireEvent.change(screen.getByLabelText('Filter environment'), {
+  await change(screen.getByLabelText('Filter environment'), {
     target: { value: 'development' },
   });
   await waitFor(() => assert.ok(f.listSignal));
