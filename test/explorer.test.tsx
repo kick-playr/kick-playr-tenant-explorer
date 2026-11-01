@@ -355,3 +355,176 @@ test('user list marks active tenant administrators and excludes partial or revok
         ?.textContent?.includes('Tenant administrator'),
     );
 });
+
+test('Deleted tenants filter sends deletion=only, resets pagination and uses returned deleted-only rows and totals', async () => {
+  const paths: string[] = [];
+  const deleted = {
+    ...tenant,
+    id: 'deleted-club',
+    deletionId: 'retained-or-purged-operation',
+    status: 'disabled',
+    public: { ...tenant.public, name: 'Deleted Club' },
+  };
+  const request: Transport = async (path) => {
+    paths.push(path);
+    const query = new URL('http://fixture.invalid/' + path).searchParams;
+    if (query.get('deletion') === 'only')
+      return { items: [deleted], total: 1, page: 1, pageSize: 20 };
+    return {
+      items: [tenant],
+      total: 21,
+      page: Number(query.get('page') ?? 1),
+      pageSize: 20,
+    };
+  };
+  render(<Explorer request={request} />);
+  await screen.findByRole('button', { name: /Open FC Winikon/ });
+  await screen.findByText('1–20 of 21');
+  fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
+  await waitFor(() =>
+    assert.ok(
+      paths.some(
+        (path) =>
+          new URL('http://fixture.invalid/' + path).searchParams.get('page') ===
+          '2',
+      ),
+    ),
+  );
+  const select = screen.getByLabelText('Filter status');
+  assert.ok(screen.getByRole('option', { name: 'Deleted tenants' }));
+  fireEvent.change(select, { target: { value: 'deleted' } });
+  await screen.findByRole('button', { name: /Open Deleted Club/ });
+  await screen.findByText('1–1 of 1');
+  assert.equal(screen.queryByRole('button', { name: /Open FC Winikon/ }), null);
+  const last = new URL('http://fixture.invalid/' + paths.at(-1));
+  assert.equal(last.searchParams.get('deletion'), 'only');
+  assert.equal(last.searchParams.get('page'), '1');
+  assert.equal(last.searchParams.has('status'), false);
+  assert.equal(
+    (screen.getByRole('button', { name: 'Next page' }) as HTMLButtonElement)
+      .disabled,
+    true,
+  );
+  fireEvent.change(select, { target: { value: '' } });
+  await screen.findByRole('button', { name: /Open FC Winikon/ });
+  assert.equal(
+    new URL('http://fixture.invalid/' + paths.at(-1)).searchParams.has(
+      'deletion',
+    ),
+    false,
+  );
+});
+
+test('successful soft deletion and recovery refresh directory rows/counts immediately while keeping selected details', async () => {
+  let current: Tenant = structuredClone(tenant);
+  let operation: null | {
+    id: string;
+    phase: string;
+    revision: number;
+    deletedAt: string;
+    recoverUntil: string;
+    targets: [];
+  } = null;
+  let directoryReads = 0;
+  const status = () => ({
+    operation,
+    expectedRevision: current.configRevision,
+    expectedAuthorityRevision: current.authorityRevision,
+    expectedInvitationRevision: 0,
+    identity: {
+      name: current.public.name,
+      hostname: current.hostname,
+      aliases: current.aliases,
+    },
+    impact: { users: 0, pendingInvitations: 0 },
+    checklist: [],
+    recoveryAvailable: operation?.phase === 'retained',
+    inventory: {
+      complete: true,
+      controlOnly: true,
+      revision: 'fixture-registered-inventory',
+      targets: [],
+    },
+  });
+  const request: Transport = async (path, options) => {
+    if (path.startsWith('tenants?')) {
+      directoryReads++;
+      const deletedOnly =
+        new URL('http://fixture.invalid/' + path).searchParams.get(
+          'deletion',
+        ) === 'only';
+      const visible = Object.hasOwn(current, 'deletionId') === deletedOnly;
+      return {
+        items: visible ? [structuredClone(current)] : [],
+        total: visible ? 1 : 0,
+        page: 1,
+        pageSize: 20,
+      };
+    }
+    if (path.endsWith('/deletion/recover') && options?.method === 'POST') {
+      const { deletionId, ...recovered } = current;
+      void deletionId;
+      current = {
+        ...recovered,
+        status: 'disabled',
+        configRevision: 6,
+        authorityRevision: 6,
+      };
+      operation = { ...operation!, phase: 'recovered', revision: 2 };
+      return status();
+    }
+    if (path.endsWith('/deletion') && options?.method === 'POST') {
+      operation = {
+        id: '00000000-0000-4000-8000-000000000001',
+        phase: 'retained',
+        revision: 1,
+        deletedAt: '2026-11-01T12:00:00Z',
+        recoverUntil: '2027-02-01T12:00:00Z',
+        targets: [],
+      };
+      current = {
+        ...current,
+        deletionId: operation.id,
+        status: 'disabled',
+        configRevision: 5,
+        authorityRevision: 5,
+      };
+      return status();
+    }
+    if (path.endsWith('/deletion')) return status();
+    if (path.endsWith('/audit')) return [];
+    return structuredClone(current);
+  };
+  render(<Explorer request={request} />);
+  fireEvent.click(
+    await screen.findByRole('button', { name: /Open FC Winikon/ }),
+  );
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Delete tenant…' }),
+  );
+  fireEvent.change(screen.getByLabelText('Type development/winikon'), {
+    target: { value: 'development/winikon' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Delete tenant' }));
+  await screen.findByText(
+    'This tenant is read-only while marked for deletion.',
+  );
+  await screen.findByText('0 tenants');
+  assert.equal(screen.queryByRole('button', { name: /Open FC Winikon/ }), null);
+  assert.ok(screen.getByRole('heading', { level: 1, name: 'FC Winikon' }));
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Recover to disabled…' }),
+  );
+  fireEvent.change(screen.getByLabelText('Type development/winikon'), {
+    target: { value: 'development/winikon' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Recover to disabled' }));
+  await screen.findByRole('button', { name: /Open FC Winikon/ });
+  await screen.findByText('1–1 of 1');
+  await screen.findByRole('tab', { name: 'Overview' });
+  assert.equal(
+    screen.queryByText('This tenant is read-only while marked for deletion.'),
+    null,
+  );
+  assert.ok(directoryReads >= 3);
+});
