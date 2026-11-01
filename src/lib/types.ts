@@ -21,6 +21,7 @@ export const providers = [
 export type Environment = (typeof environments)[number];
 export type Status = (typeof statuses)[number];
 export interface TenantSummary {
+  deletionId?: string;
   id: string;
   environment: Environment;
   hostname: string;

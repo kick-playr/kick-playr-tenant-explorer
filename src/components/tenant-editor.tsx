@@ -26,6 +26,7 @@ import {
   PanelHeading,
   value,
 } from './ui';
+import { TenantDeletion } from './tenant-deletion';
 import { ManagerInvitations } from './manager-invitations';
 import { TenantProvisioning } from './tenant-provisioning';
 import { TenantKeys } from './tenant-keys';
@@ -129,6 +130,25 @@ export function TenantEditor({
     setSaved(false);
     setTab(next);
   }
+  if (tenant.deletionId)
+    return (
+      <section
+        className="detail-pane"
+        aria-label={`${tenant.public.name} deletion`}
+      >
+        <h1>{tenant.public.name}</h1>
+        <p>This tenant is read-only while marked for deletion.</p>
+        <TenantDeletion
+          environment={tenant.environment}
+          tenantId={tenant.id}
+          marked
+          request={request}
+          onReload={onReload}
+          onBusyChange={onBusyChange}
+        />
+        <Audit tenant={tenant} request={request} />
+      </section>
+    );
   return (
     <section
       className="detail-pane"
@@ -296,6 +316,14 @@ export function TenantEditor({
                   </Field>
                 </div>
               </SaveForm>
+              <TenantDeletion
+                environment={tenant.environment}
+                tenantId={tenant.id}
+                request={request}
+                onReload={onReload}
+                disabled={busy || dirty}
+                onBusyChange={onBusyChange}
+              />
               {tenant.status === 'provisioning' && (
                 <Notice>
                   Set up the tenant’s runtime bindings, database and identity

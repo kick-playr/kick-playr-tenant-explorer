@@ -193,3 +193,11 @@ change; no credentials or environment-variable changes are needed.
 The tenant editor has an Invitations tab for bootstrap invitations by email or exact Clerk user ID, with seven-day expiry, explicit recipient acceptance and separate delivery state. Resend invalidates the old link; failed/queued delivery can be retried. Creation needs the API's explicit tenant identity binding and dedicated working SMTP sender. This UI never returns/copies raw invitation tokens.
 
 Acceptance uses the club APP's `/invitations` page and its own Clerk workspace, not the platform console identity. Operational access stays blocked until the separate APP-26 readiness/mapping contract is implemented. The club settings workspace and invitation controls share the same development baseline.
+
+## Tenant deletion
+
+Platform tenant Overview includes a separate **Danger zone**. Marking a tenant for deletion blocks access and retains its data for three calendar months (Europe/Zurich, month-end clamped). Deleted tenants stay read-only and can be found with the **Marked for deletion** status filter. Recovery is available before the deadline and restores a disabled tenant with fresh grants required.
+
+Permanent deletion is available anytime after completing the manual cleanup checklist and final all-done checkbox, then typing the exact `environment/tenantId`. The server requires a privileged, complete verified database inventory; missing inventory disables permanent deletion and displays the operator action. Read the API README's **Controlled tenant deletion** section before configuring that inventory. The checklist covers external accounts/access, in-flight work, schedules, files/backups, providers, Clerk, DNS/certificates and caches/running configurations. Shared resources must remain protected.
+
+There is no automatic purge at three months. Every purge remains explicitly confirmation-gated. Progress is durable; refresh after a lost response and retry failed cleanup using the same operation. Recovery becomes unavailable as soon as purge starts. The completion label applies to verified database targets, with a minimal deletion tombstone/audit retained.
