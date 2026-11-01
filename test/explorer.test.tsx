@@ -356,7 +356,7 @@ test('user list marks active tenant administrators and excludes partial or revok
     );
 });
 
-test('Deleted tenants filter sends deletion=only, resets pagination and uses returned deleted-only rows and totals', async () => {
+test('Marked for deletion filter sends deletion=only, resets pagination and uses returned deleted-only rows and totals', async () => {
   const paths: string[] = [];
   const deleted = {
     ...tenant,
@@ -391,7 +391,8 @@ test('Deleted tenants filter sends deletion=only, resets pagination and uses ret
     ),
   );
   const select = screen.getByLabelText('Filter status');
-  assert.ok(screen.getByRole('option', { name: 'Deleted tenants' }));
+  assert.ok(screen.getByRole('option', { name: 'Marked for deletion' }));
+  assert.deepEqual(Array.from((select as HTMLSelectElement).options, option => option.text), ['All statuses', 'provisioning', 'active', 'suspended', 'disabled', 'Marked for deletion']);
   fireEvent.change(select, { target: { value: 'deleted' } });
   await screen.findByRole('button', { name: /Open Deleted Club/ });
   await screen.findByText('1–1 of 1');

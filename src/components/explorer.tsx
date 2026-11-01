@@ -244,10 +244,10 @@ export function Explorer({
               }}
             >
               <option value="">All statuses</option>
-              <option value="deleted">Deleted tenants</option>
               {statuses.map((s) => (
                 <option key={s}>{s}</option>
               ))}
+              <option value="deleted">Marked for deletion</option>
             </select>
           </div>
           <div
