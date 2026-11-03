@@ -248,3 +248,25 @@ record encryption.
 Optional `CLERK_MACHINE_SECRET_KEY` is also vault-owned. If omitted from the
 process descriptor, its ambient environment value is removed before Clerk SDK
 imports so machine credentials cannot silently fall back to .env.
+
+### Explicit live configuration (APP-49)
+
+After installing this adapter, existing LOCAL_KEYVAULT deployments retain the
+startup behavior described above until **Activate live configuration** is chosen
+for `explorer` in the vault Applications UI. Create its links with the same ENV
+names, then activate. No new process bootstrap variable is needed. Activation is
+sticky and the adapter checks for it automatically, including when idle.
+
+Once active, the server polls the shared `explorer` model and validates a complete
+candidate before replacing its immutable environment. Realm resolution and Clerk
+middleware receive the current scoped secret and optional platform machine key
+per request. Healthy ordinary credential updates target adoption within five
+seconds. A transient vault outage retains a still-valid working generation and
+reports a warning; observed access denial or known expiration blocks new reads.
+Values remain server-only. ENV_VARIABLES deployments retain their existing path.
+
+The adapter carries its legacy encryption-key baseline into activation. Changing
+`CLERK_ENCRYPTION_KEY` requires a safe migration adapter and is currently blocked;
+it cannot be activated as an ordinary credential refresh. Clerk captures that key
+at import, so this adapter installs it only once. APP-43 migration orchestration
+and the other consumer adapters remain separate delivery work.

@@ -21,6 +21,7 @@ export class RealmConfigurationError extends Error {
 export interface ServerRealm {
   publishableKey: string;
   secretKey: string;
+  machineSecretKey?: string;
   club: boolean;
 }
 export type RealmResult =
@@ -145,7 +146,14 @@ export async function realmForHost(
     const secretKey = env.CLERK_SECRET_KEY;
     if (!publishableKey || !secretKey)
       throw new RealmConfigurationError('credentials');
-    return { publishableKey, secretKey, club: false };
+    return {
+      publishableKey,
+      secretKey,
+      club: false,
+      ...(env.CLERK_MACHINE_SECRET_KEY
+        ? { machineSecretKey: env.CLERK_MACHINE_SECRET_KEY }
+        : {}),
+    };
   }
   if (
     Object.keys(row).sort().join(',') !==

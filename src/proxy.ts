@@ -22,9 +22,15 @@ export default async function proxy(
     () => ({
       publishableKey: realm.publishableKey,
       secretKey: realm.secretKey,
+      machineSecretKey: realm.machineSecretKey,
     }),
   )(request, event);
 }
 export const config = {
-  matcher: ['/', '/sign-in(.*)', '/api/explorer(.*)', '/api/club-branding/:path*'],
+  matcher: [
+    '/',
+    '/sign-in(.*)',
+    '/api/explorer(.*)',
+    '/api/club-branding/:path*',
+  ],
 };

@@ -7,6 +7,44 @@ function isEncryptionKey(value: string) {
     bytes.fill(0);
   }
 }
+export function isExplorerSecretMapping(name: string): boolean {
+  return (
+    [
+      'CLERK_SECRET_KEY',
+      'CLERK_ENCRYPTION_KEY',
+      'CLERK_MACHINE_SECRET_KEY',
+    ].includes(name) || /^EXPLORER_CLUB_[A-Z0-9_]+_CLERK_SECRET_KEY$/.test(name)
+  );
+}
+export function explorerSecretEnvironment(
+  base: Readonly<Record<string, string | undefined>>,
+  values: Readonly<Record<string, string>>,
+): Readonly<Record<string, string | undefined>> {
+  if (
+    !values.CLERK_SECRET_KEY ||
+    !values.CLERK_ENCRYPTION_KEY ||
+    Object.keys(values).length > 100 ||
+    Object.keys(values).some((name) => !isExplorerSecretMapping(name))
+  )
+    throw unavailable();
+  const captured = { ...base };
+  for (const name of Object.keys(captured))
+    if (isExplorerSecretMapping(name)) delete captured[name];
+  for (const [name, value] of Object.entries(values)) {
+    if (
+      !value ||
+      value.length > 4096 ||
+      (name === 'CLERK_ENCRYPTION_KEY'
+        ? !isEncryptionKey(value)
+        : name === 'CLERK_MACHINE_SECRET_KEY'
+          ? !/^[\x21-\x7e]{1,4096}$/.test(value)
+          : !/^sk_(?:test|live)_[A-Za-z0-9]+$/.test(value))
+    )
+      throw unavailable();
+    captured[name] = value;
+  }
+  return Object.freeze(captured);
+}
 const unavailable = () => Error('Explorer server secrets unavailable');
 /** Server-only state factory. Tests inject a transport; no global env mutation. */
 export function createServerSecretsLoader(
@@ -36,7 +74,8 @@ export function createServerSecretsLoader(
         runtime = await factory();
         // Discover the finite server-owned mapping policy before loading values.
         const application = environment.LOCAL_KEYVAULT_BINDINGS_JSON
-          ? JSON.parse(environment.LOCAL_KEYVAULT_BINDINGS_JSON)?.applications?.explorer
+          ? JSON.parse(environment.LOCAL_KEYVAULT_BINDINGS_JSON)?.applications
+              ?.explorer
           : await runtime.loadApplication('explorer');
         const secrets = application?.request?.secrets;
         if (!Array.isArray(secrets) || !secrets.length || secrets.length > 100)
@@ -73,30 +112,7 @@ export function createServerSecretsLoader(
           Object.keys(loaded.mappings).some((name) => !names.includes(name))
         )
           throw unavailable();
-        const captured = { ...environment };
-        for (const name of Object.keys(captured))
-          if (
-            name === 'CLERK_SECRET_KEY' ||
-            name === 'CLERK_ENCRYPTION_KEY' ||
-            name === 'CLERK_MACHINE_SECRET_KEY' ||
-            /^EXPLORER_CLUB_[A-Z0-9_]+_CLERK_SECRET_KEY$/.test(name)
-          )
-            delete captured[name];
-        for (const name of names) {
-          const value = loaded.mappings[name];
-          if (
-            !value ||
-            value.length > 4096 ||
-            (name === 'CLERK_ENCRYPTION_KEY'
-              ? !isEncryptionKey(value)
-              : name === 'CLERK_MACHINE_SECRET_KEY'
-                ? !/^[\x21-\x7e]{1,4096}$/.test(value)
-                : !/^sk_(?:test|live)_[A-Za-z0-9]+$/.test(value))
-          )
-            throw unavailable();
-          captured[name] = value;
-        }
-        return Object.freeze(captured);
+        return explorerSecretEnvironment(environment, loaded.mappings);
       } catch {
         runtime?.close();
         throw unavailable();
