@@ -137,6 +137,7 @@ export function createLiveServerSecretsSource(
       }
       if (mode === 'legacy') {
         legacyEnvironment = await legacy!();
+        if (!validLegacy()) throw unavailable();
         return legacyEnvironment;
       }
       liveRequested = true;

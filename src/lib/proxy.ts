@@ -23,11 +23,13 @@ export async function proxyRequest(
     !(
       club ||
       path === 'access' ||
-      /^tenants(?:\/(development|test|preview|production)\/[a-z0-9][a-z0-9-]{0,63}(?:\/(?:audit|keys|deletion(?:\/(?:recover|purge))?|onboarding(?:\/(?:save|verify|mongo-url|configure-keys))?|invitations(?:\/[A-Za-z0-9_-]{1,128}\/(?:resend|revoke|deliver|revoke-access))?|(?:users|credentials|integrations)\/[A-Za-z0-9_-]{1,128}))?)?$/.test(
+      /^tenants(?:\/(development|test|preview|production)\/[a-z0-9][a-z0-9-]{0,63}(?:\/(?:audit|keys|key-rotation|deletion(?:\/(?:recover|purge))?|onboarding(?:\/(?:save|verify|mongo-url|configure-keys))?|invitations(?:\/[A-Za-z0-9_-]{1,128}\/(?:resend|revoke|deliver|revoke-access))?|(?:users|credentials|integrations)\/[A-Za-z0-9_-]{1,128}))?)?$/.test(
         path,
       )
     )
   )
+    return fail(400, 'Invalid explorer route');
+  if (path.endsWith('/key-rotation') && request.method !== 'GET')
     return fail(400, 'Invalid explorer route');
   const catalogFlag =
     /^clubs\/[^/]+\/[^/]+\/catalog\/(categories|branches)\/flags\/([^/]+)$/.exec(

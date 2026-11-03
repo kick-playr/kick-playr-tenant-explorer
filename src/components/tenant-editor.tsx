@@ -173,6 +173,13 @@ export function TenantEditor({
         </div>
         <Badge value={tenant.status} />
       </div>
+      {tenant.status === 'in-rotation' && (
+        <Notice>
+          Tenant key migration is in progress. Normal traffic and configuration
+          changes remain blocked until verification completes. See operational
+          encryption keys for progress.
+        </Notice>
+      )}
       <div className="tenant-meta">
         <span>
           Configuration <strong>r{tenant.configRevision}</strong>

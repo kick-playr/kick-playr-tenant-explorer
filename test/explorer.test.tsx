@@ -400,6 +400,7 @@ test('Marked for deletion filter sends deletion=only, resets pagination and uses
       'active',
       'suspended',
       'disabled',
+      'in-rotation',
       'Marked for deletion',
     ],
   );

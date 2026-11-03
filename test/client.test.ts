@@ -471,3 +471,55 @@ test('deletion proxy forwards only fixed tenant deletion actions with the signed
     );
   }
 });
+test('rotation progress proxy is authenticated and read-only at the fixed platform endpoint', async () => {
+  const segments = ['tenants', 'development', 'club', 'key-rotation'];
+  let calls = 0;
+  const transport: typeof fetch = async (input, init) => {
+    calls++;
+    assert.equal(
+      String(input),
+      'http://127.0.0.1:3003/api/platform/tenants/development/club/key-rotation',
+    );
+    assert.equal(
+      new Headers(init?.headers).get('Authorization'),
+      'Bearer operator-token',
+    );
+    return Response.json({ rotation: null });
+  };
+  assert.equal(
+    (
+      await proxyRequest(
+        new Request('http://localhost/status'),
+        segments,
+        null,
+        'http://127.0.0.1:3003',
+        transport,
+      )
+    ).status,
+    401,
+  );
+  for (const method of ['POST', 'DELETE', 'HEAD'])
+    assert.equal(
+      (
+        await proxyRequest(
+          new Request('http://localhost/status', { method }),
+          segments,
+          'operator-token',
+          'http://127.0.0.1:3003',
+          transport,
+        )
+      ).status,
+      400,
+    );
+  assert.equal(calls, 0);
+  const response = await proxyRequest(
+    new Request('http://localhost/status'),
+    segments,
+    'operator-token',
+    'http://127.0.0.1:3003',
+    transport,
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { rotation: null });
+  assert.equal(calls, 1);
+});

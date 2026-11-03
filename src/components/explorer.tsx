@@ -16,7 +16,7 @@ import {
 import { apiRequest, tenantPath, type Transport } from '../lib/api';
 import {
   environments,
-  statuses,
+  readonlyStatuses,
   type Tenant,
   type TenantList,
   type TenantSummary,
@@ -285,7 +285,7 @@ export function Explorer({
               }}
             >
               <option value="">All statuses</option>
-              {statuses.map((s) => (
+              {readonlyStatuses.map((s) => (
                 <option key={s}>{s}</option>
               ))}
               <option value="deleted">Marked for deletion</option>

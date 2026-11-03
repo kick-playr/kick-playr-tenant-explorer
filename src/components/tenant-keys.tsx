@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { ArrowPathIcon } from '@heroicons/react/24/outline';
 import { tenantPath, type Transport } from '../lib/api';
 import type { TenantKeyFiles } from '../lib/types';
+import { TenantKeyRotation } from './tenant-key-rotation';
 import { Badge, ErrorText, Notice, PanelHeading } from './ui';
 
 const descriptions = {
@@ -75,6 +76,13 @@ export function TenantKeys({
         </p>
       ) : (
         <>
+          {result.strategy === 'LOCAL_KEYVAULT' && (
+            <TenantKeyRotation
+              environment={environment}
+              tenantId={tenantId}
+              request={request}
+            />
+          )}
           <div className="key-binding-summary">
             <code>{result.reference}</code>
             <Badge value={result.status} />
@@ -102,7 +110,7 @@ export function TenantKeys({
               {result.status === 'unavailable' && (
                 <Notice error>
                   {result.strategy === 'LOCAL_KEYVAULT'
-                    ? 'Correct the vault namespace, read permissions and pinned key versions, then restart the affected applications and check again. Loaded snapshots do not refresh automatically.'
+                    ? 'Check the vault namespace, read permissions and migration status. Live consumers refresh automatically. For consumers still using startup configuration, restart the affected applications after correcting their configuration.'
                     : 'Some key sources need attention. Missing or invalid environment values, or unsafe legacy files, must be corrected on the API server.'}
                 </Notice>
               )}
@@ -131,7 +139,7 @@ export function TenantKeys({
                       </dd>
                       {file.version && (
                         <>
-                          <dt>Pinned vault version</dt>
+                          <dt>Loaded vault version</dt>
                           <dd>
                             <code>{file.version}</code>
                           </dd>

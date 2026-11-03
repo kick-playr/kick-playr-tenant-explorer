@@ -19,7 +19,8 @@ export const providers = [
   'imap',
 ] as const;
 export type Environment = (typeof environments)[number];
-export type Status = (typeof statuses)[number];
+export const readonlyStatuses = [...statuses, 'in-rotation'] as const;
+export type Status = (typeof readonlyStatuses)[number];
 export interface TenantSummary {
   deletionId?: string;
   id: string;

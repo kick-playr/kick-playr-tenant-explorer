@@ -23,7 +23,7 @@ const canonical = (x: unknown) =>
         )
       : v,
   );
-function fixture(failFirstLiveStart = false) {
+function fixture(failFirstLiveStart = false, expiry?: number) {
   let live = false,
     denied = false,
     outage = false,
@@ -56,7 +56,10 @@ function fixture(failFirstLiveStart = false) {
           mapping === 'CLERK_SECRET_KEY'
             ? ('secret' as const)
             : ('encryption-key' as const),
-        attributes: attrs,
+        attributes: {
+          ...attrs,
+          ...(expiry === undefined ? {} : { exp: expiry }),
+        },
       }))
       .sort((a, b) => (a.mapping < b.mapping ? -1 : 1));
     const identity = {
@@ -133,7 +136,10 @@ function fixture(failFirstLiveStart = false) {
     secrets: request.secrets.map((s) => ({
       ...s,
       value: s.mapping === 'CLERK_SECRET_KEY' ? 'sk_test_old123' : encryption,
-      attributes: attrs,
+      attributes: {
+        ...attrs,
+        ...(expiry === undefined ? {} : { exp: expiry }),
+      },
     })),
   };
   const environment = {
@@ -300,6 +306,21 @@ test('an already-live cold start adopts ordinary updates without loading obsolet
     assert.equal(f.source.status().state, 'applied');
     assert.equal(f.legacyReads(), 0);
   } finally {
+    f.source.close();
+  }
+});
+
+test('healthy legacy metadata does not extend known cached secret expiry', async () => {
+  const expiry = Math.floor(Date.now() / 1000) + 600;
+  const f = fixture(false, expiry);
+  const original = Date.now;
+  try {
+    await f.source.load();
+    Date.now = () => expiry * 1000 + 1;
+    await assert.rejects(f.source.load(), /unavailable/i);
+    assert.equal(f.legacyReads(), 1);
+  } finally {
+    Date.now = original;
     f.source.close();
   }
 });
