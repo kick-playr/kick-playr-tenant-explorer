@@ -34,7 +34,7 @@ function fixture(failFirstLiveStart = false, expiry?: number) {
   const encryption = Buffer.alloc(32, 7).toString('base64');
   let legacyReads = 0;
   const calls: string[] = [];
-  const names = {
+  const names: Record<string, string> = {
     CLERK_SECRET_KEY: 'clerk-secret',
     CLERK_ENCRYPTION_KEY: 'clerk-encryption',
   };
@@ -53,9 +53,9 @@ function fixture(failFirstLiveStart = false, expiry?: number) {
         version:
           mapping === 'CLERK_SECRET_KEY' ? secretVersion : encryptionVersion,
         classification:
-          mapping === 'CLERK_SECRET_KEY'
-            ? ('secret' as const)
-            : ('encryption-key' as const),
+          mapping === 'CLERK_ENCRYPTION_KEY'
+            ? ('encryption-key' as const)
+            : ('secret' as const),
         attributes: {
           ...attrs,
           ...(expiry === undefined ? {} : { exp: expiry }),
@@ -97,7 +97,7 @@ function fixture(failFirstLiveStart = false, expiry?: number) {
         ...d,
         resources: d.resources.map((r) => ({
           ...r,
-          value: r.mapping === 'CLERK_SECRET_KEY' ? secret : encryption,
+          value: r.mapping === 'CLERK_ENCRYPTION_KEY' ? encryption : r.mapping === 'CLERK_SECRET_KEY' ? secret : 'sk_test_tenant123',
         })),
       });
     if (action === 'register')
@@ -195,6 +195,10 @@ function fixture(failFirstLiveStart = false, expiry?: number) {
     legacyReads: () => legacyReads,
     activate: () => {
       live = true;
+    },
+    enrollTenant: () => {
+      names.EXPLORER_CLUB_NEW_CLERK_SECRET_KEY = 'new-club-clerk';
+      generation++;
     },
     updateSecret: () => {
       secret = 'sk_test_new123';
@@ -323,4 +327,29 @@ test('healthy legacy metadata does not extend known cached secret expiry', async
     Date.now = original;
     f.source.close();
   }
+});
+
+
+test('running Explorer adopts a new trusted realm and server credential without process environment writes', async () => {
+  const f = fixture();
+  const environmentBefore = JSON.stringify({ ...process.env });
+  try {
+    f.activate();
+    await f.source.load();
+    f.enrollTenant();
+    const began = performance.now();
+    let captured = await f.source.load();
+    while (!captured.EXPLORER_CLUB_NEW_CLERK_SECRET_KEY && performance.now() - began < 4500) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      captured = await f.source.load();
+    }
+    assert.equal(captured.EXPLORER_CLUB_NEW_CLERK_SECRET_KEY, 'sk_test_tenant123');
+    const host = 'new.explorer.example';
+    const realm = await realmForHost(host, captured, async (_input, init) => {
+      assert.equal(init?.cache, 'no-store');
+      return Response.json({ host, club: true, publishableKey: 'pk_test_new123', secretVariable: 'EXPLORER_CLUB_NEW_CLERK_SECRET_KEY' });
+    });
+    assert.equal(realm.secretKey, 'sk_test_tenant123');
+    assert.ok(JSON.stringify({ ...process.env }) === environmentBefore, 'process environment must be immutable');
+  } finally { f.source.close(); }
 });
