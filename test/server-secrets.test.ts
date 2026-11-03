@@ -193,3 +193,11 @@ test('manifest-only startup derives finite Clerk mappings before loading values'
   assert.deepEqual(calls, ['manifest:explorer', 'snapshot:explorer']);
   assert.equal(await load(), loaded);
 });
+
+test('Clerk hex64 keys are accepted unchanged with strict base64 compatibility', async()=>{
+  const {explorerSecretEnvironment}=await import('../src/lib/server-secrets-core');
+  for(const value of ['aB01'.repeat(16),Buffer.alloc(32,7).toString('base64')]) {
+    const loaded=explorerSecretEnvironment({}, {CLERK_SECRET_KEY:'sk_test_example',CLERK_ENCRYPTION_KEY:value});assert.equal(loaded.CLERK_ENCRYPTION_KEY,value);
+  }
+  for(const value of ['g'.repeat(64),'a'.repeat(63),'Zg==',Buffer.alloc(32,7).toString('base64')+'\n'])assert.throws(()=>explorerSecretEnvironment({}, {CLERK_SECRET_KEY:'sk_test_example',CLERK_ENCRYPTION_KEY:value}));
+});

@@ -1,5 +1,6 @@
 import type { SecretsRuntime } from '@kick-playr/local-key-vault/runtime-client';
 function isEncryptionKey(value: string) {
+  if (/^[a-fA-F0-9]{64}$/.test(value)) return true;
   const bytes = Buffer.from(value, 'base64');
   try {
     return bytes.length === 32 && bytes.toString('base64') === value;
