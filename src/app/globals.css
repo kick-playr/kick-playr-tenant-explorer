@@ -2180,41 +2180,93 @@ input:read-only {
 .bexio-tag-mappings {
   margin-top: 0;
 }
-.bexio-tag-mappings h4 {
-  margin: 20px 0 8px;
-}
-.bexio-mapping {
-  margin-top: 6px;
-  padding: 10px 12px;
-  border-radius: 8px;
+.bexio-mapping-section {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
   background: var(--theme-subtle);
 }
-.bexio-mapping summary {
-  cursor: pointer;
+.bexio-mapping-section > h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
 }
-.bexio-mapping summary span {
-  margin-left: 10px;
-  font-size: 12px;
-  overflow-wrap: anywhere;
+.bexio-mapping-group {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--theme-surface);
 }
-.bexio-label-options {
-  display: grid;
-  gap: 7px;
-  max-height: 220px;
-  overflow: auto;
-  margin: 12px 0;
-}
-.bexio-label-options label {
+.bexio-group-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  margin-bottom: 12px;
 }
-.bexio-label-options input {
-  width: 16px;
-  height: 16px;
+.bexio-group-heading h4 {
+  margin: 0 auto 0 0;
+}
+.bexio-group-heading .muted {
+  font-size: 12px;
+}
+.bexio-mapping {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.8fr) minmax(0, 1.2fr);
+  align-items: start;
+  gap: 12px;
+  margin-top: 10px;
+}
+.bexio-mapping-label {
+  padding-top: 8px;
+  font-weight: 600;
+}
+.bexio-mapping-controls {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.bexio-select-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.bexio-mapping select {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+}
+.bexio-direct-link {
+  flex: none;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: white;
+  color: #164c3d;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.bexio-remove {
+  flex: none;
+  color: var(--danger, #c24141);
 }
 .bexio-mapping .form-actions {
-  margin-top: 12px;
+  margin-top: 4px;
+}
+@media (max-width: 640px) {
+  .bexio-mapping {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .bexio-mapping-section {
+    padding: 12px;
+  }
+  .bexio-group-heading .muted {
+    flex-basis: 100%;
+  }
 }
 .email-editor-shell {
   border: 1px solid var(--line);
@@ -2525,3 +2577,10 @@ input[type='checkbox'] {
 .deletion-section .checkbox-field { align-items: flex-start; margin: 16px 0; line-height: 1.5; }
 .button.danger { background: var(--color-danger-surface); color: var(--color-danger-text); border: 1px solid currentColor; }
 .button.danger:not(:disabled):hover { filter: brightness(.94); }
+
+.bexio-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  background: url('/bexio-favicon.ico') center / contain no-repeat;
+}

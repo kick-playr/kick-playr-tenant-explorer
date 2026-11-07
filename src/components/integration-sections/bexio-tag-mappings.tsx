@@ -28,7 +28,6 @@ export function BexioTagMappings({
     CatalogCollection,
     BexioCatalog
   > | null>(null);
-  const [drafts, setDrafts] = useState<Record<string, number[]>>({});
   const [loading, setLoading] = useState(true),
     [pending, setPending] = useState(false),
     [reload, setReload] = useState(0);
@@ -63,36 +62,14 @@ export function BexioTagMappings({
       });
     return () => abort.abort();
   }, [path, request, active, reload]);
-  function setDraft(next: Record<string, number[]>) {
-    setDrafts(next);
-    onDirtyChange('catalog:bexio', Object.keys(next).length > 0);
-    setMessage('');
-  }
-  function update(
-    collection: CatalogCollection,
-    flag: string,
-    id: number,
-    checked: boolean,
-  ) {
-    const key = `${collection}:${flag}`,
-      base = mappingIds(catalogs![collection], flag);
-    const selected = drafts[key] ?? base;
-    const ids = (
-      checked ? [...selected, id] : selected.filter((value) => value !== id)
-    ).sort((a, b) => a - b);
-    const next = { ...drafts, [key]: ids };
-    if (JSON.stringify(ids) === JSON.stringify(base)) delete next[key];
-    setDraft(next);
-    setError('');
-  }
   async function save(
     collection: CatalogCollection,
     flag: string,
     label: string,
+    ids: number[],
   ) {
-    const key = `${collection}:${flag}`,
-      ids = drafts[key];
-    if (!catalogs || !ids || pending || busy) return;
+    if (!catalogs || pending || busy) return;
+    onDirtyChange('catalog:bexio', true);
     setPending(true);
     onBusyChange?.(true);
     setError('');
@@ -108,9 +85,6 @@ export function BexioTagMappings({
         }),
       );
       setCatalogs({ ...catalogs, [collection]: response });
-      const next = { ...drafts };
-      delete next[key];
-      setDraft(next);
       setMessage(`${label} mapping saved.`);
     } catch (e) {
       setError(
@@ -121,19 +95,14 @@ export function BexioTagMappings({
             : 'Unable to save Bexio mapping.',
       );
     } finally {
+      onDirtyChange('catalog:bexio', false);
       setPending(false);
       onBusyChange?.(false);
     }
   }
   function refresh() {
     if (pending || busy) return;
-    if (
-      Object.keys(drafts).length &&
-      !window.confirm('Discard unsaved Bexio mappings and reload?')
-    )
-      return;
     loaded.current = false;
-    setDraft({});
     setReload((n) => n + 1);
   }
   return (
@@ -141,15 +110,19 @@ export function BexioTagMappings({
       <h3>Tags and labels</h3>
       <p className="muted">
         Assign the Bexio categories and tags used by your club’s workflows.
-        Multiple labels can be selected for each mapping. Explorer access is
-        assigned separately.
+        Changes save automatically. Open assigned labels directly in Bexio.
+        Explorer access is assigned separately.
       </p>
       <p className="muted">
         Team settings, seasons and team-specific assignments remain in the club
         application.
       </p>
       {error && <Notice error>{error}</Notice>}
-      {message && <p role="status">{message}</p>}
+      {pending ? (
+        <p role="status">Saving mapping…</p>
+      ) : (
+        message && <p role="status">{message}</p>
+      )}
       <button
         type="button"
         className="button"
@@ -162,77 +135,144 @@ export function BexioTagMappings({
         <p role="status">Loading Bexio labels…</p>
       ) : (
         catalogs &&
-        BEXIO_MAPPING_GROUPS.map((group) => (
-          <section key={group.collection} aria-label={group.title}>
-            <h4>{group.title}</h4>
-            {group.fields.map((field) => {
-              const snapshot = catalogs[group.collection],
-                key = `${group.collection}:${field.key}`,
-                selected = drafts[key] ?? mappingIds(snapshot, field.key);
-              const names = snapshot.items
-                .filter((item) => selected.includes(item.id))
-                .map((item) => `${item.name} (#${item.id})`)
-                .join(', ');
+        [
+          {
+            title: 'Categories and tags',
+            roles: false,
+            description:
+              'Identify contacts throughout your club’s workflows, from trials to billing and clothing.',
+          },
+          {
+            title: 'Roles',
+            roles: true,
+            description:
+              'Assign the categories and tags that identify functions and roles within your club.',
+          },
+        ].map((section) => (
+          <section key={section.title} className="bexio-mapping-section">
+            <h3>{section.title}</h3>
+            <p className="muted">{section.description}</p>
+            {BEXIO_MAPPING_GROUPS.map((group) => {
+              const roleKeys =
+                group.collection === 'categories'
+                  ? ['is1418Coach', 'isTrainerChild', 'isTrainer']
+                  : [
+                      'isTrainer',
+                      'isAthleticTrainer',
+                      'isGoalieTrainer',
+                      'isCoach',
+                      'isCoTrainer',
+                    ];
+              const fields = group.fields.filter(
+                (field) => roleKeys.includes(field.key) === section.roles,
+              );
+              const snapshot = catalogs[group.collection];
+              const resource =
+                group.collection === 'categories'
+                  ? 'kontakt_kategorie'
+                  : 'kontakt_branche';
               return (
-                <details key={field.key} className="bexio-mapping">
-                  <summary>
-                    <strong>{field.label}</strong>
-                    <span className="muted">{names || 'Not configured'}</span>
-                  </summary>
-                  <p className="muted">{field.hint}</p>
-                  <fieldset
-                    disabled={busy || pending}
-                    className="bexio-label-options"
-                    aria-label={`${field.label} labels`}
-                  >
-                    {snapshot.items.length ? (
-                      snapshot.items.map((item) => (
-                        <label key={item.id}>
-                          <input
-                            type="checkbox"
-                            aria-label={`${field.label}: ${item.name} (#${item.id})`}
-                            checked={selected.includes(item.id)}
-                            onChange={(e) =>
-                              update(
-                                group.collection,
-                                field.key,
-                                item.id,
-                                e.target.checked,
-                              )
-                            }
-                          />
-                          {item.name} <span className="muted">#{item.id}</span>
-                        </label>
-                      ))
-                    ) : (
-                      <p>No labels configured in this club’s catalog.</p>
-                    )}
-                  </fieldset>
-                  <div className="form-actions">
-                    <button
-                      type="button"
-                      className="button primary"
-                      disabled={!drafts[key] || busy || pending}
-                      onClick={() =>
-                        void save(group.collection, field.key, field.label)
-                      }
-                    >
-                      Save {field.label} mapping
-                    </button>
-                    <button
-                      type="button"
+                <section
+                  key={group.collection}
+                  className="bexio-mapping-group"
+                  aria-label={`${section.title}: ${group.title}`}
+                >
+                  <div className="bexio-group-heading">
+                    <h4>{group.title}</h4>
+                    <span className="muted">
+                      Create and manage labels in Bexio
+                    </span>
+                    <a
                       className="button"
-                      disabled={!drafts[key] || busy || pending}
-                      onClick={() => {
-                        const next = { ...drafts };
-                        delete next[key];
-                        setDraft(next);
-                      }}
+                      href={`https://office.bexio.com/index.php/${resource}/list`}
+                      target="_blank"
+                      rel="noreferrer"
                     >
-                      Reset {field.label} mapping
-                    </button>
+                      Bexio ↗ Manage
+                    </a>
                   </div>
-                </details>
+                  {fields.map((field) => {
+                    const key = `${group.collection}:${field.key}`;
+                    const selected = mappingIds(snapshot, field.key);
+                    return (
+                      <div key={field.key} className="bexio-mapping">
+                        <label
+                          className="bexio-mapping-label"
+                          htmlFor={`bexio-${key}`}
+                          title={field.hint}
+                        >
+                          {field.label}
+                        </label>
+                        <div className="bexio-mapping-controls">
+                          <div className="bexio-select-row">
+                            <select
+                              id={`bexio-${key}`}
+                              value={
+                                selected.length > 1
+                                  ? 'multiple'
+                                  : (selected[0] ?? '')
+                              }
+                              disabled={
+                                busy || pending || !snapshot.items.length
+                              }
+                              onChange={(e) =>
+                                void save(
+                                  group.collection,
+                                  field.key,
+                                  field.label,
+                                  e.target.value
+                                    ? [Number(e.target.value)]
+                                    : [],
+                                )
+                              }
+                            >
+                              <option value="">Choose a label…</option>
+                              {selected.length > 1 && (
+                                <option value="multiple" disabled>
+                                  {selected
+                                    .map(
+                                      (id) =>
+                                        snapshot.items.find(
+                                          (item) => item.id === id,
+                                        )?.name,
+                                    )
+                                    .join(', ')}{' '}
+                                  (multiple labels)
+                                </option>
+                              )}
+                              {snapshot.items.map((item) => (
+                                <option key={item.id} value={item.id}>
+                                  {item.name}
+                                </option>
+                              ))}
+                            </select>
+                            {selected.map((id) => {
+                              const item = snapshot.items.find(
+                                (option) => option.id === id,
+                              )!;
+                              return (
+                                <a
+                                  key={id}
+                                  className="bexio-direct-link"
+                                  href={`https://office.bexio.com/index.php/${resource}/edit/id/${id}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  aria-label={`Open ${item.name} in Bexio`}
+                                  title={`Open ${item.name} in Bexio`}
+                                >
+                                  <span
+                                    className="bexio-icon"
+                                    aria-hidden="true"
+                                  />
+                                </a>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </section>
               );
             })}
           </section>

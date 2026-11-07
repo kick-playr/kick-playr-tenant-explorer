@@ -64,24 +64,35 @@ test('edits all mapping types using focused CAS writes and keeps team metadata o
       onDirtyChange={(_, value) => dirty.push(value)}
     />,
   );
-  await screen.findByLabelText('Trial: Other label (#11)');
+  await screen.findByLabelText('Trial');
   assert.equal(screen.queryByText('Kiosk'), null);
-  fireEvent.click(screen.getByLabelText('Trial: Other label (#11)'));
-  assert.equal(dirty.at(-1), true);
-  fireEvent.click(
-    screen.getByRole('button', { name: 'Save Trial mapping', hidden: true }),
+  assert.equal(
+    screen
+      .getByRole('link', { name: 'Open Trial label in Bexio' })
+      .getAttribute('href'),
+    'https://office.bexio.com/index.php/kontakt_branche/edit/id/10',
   );
+  assert.equal(
+    screen
+      .getByRole('link', { name: 'Open Members in Bexio' })
+      .getAttribute('href'),
+    'https://office.bexio.com/index.php/kontakt_kategorie/edit/id/1',
+  );
+  fireEvent.change(screen.getByLabelText('Trial'), {
+    target: { value: '11' },
+  });
+  assert.equal(dirty.at(-1), true);
   await waitFor(() => assert.equal(writes.length, 1));
   assert.deepEqual(writes[0], {
     path: 'clubs/development/fcrww/catalog/branches/flags/isTrial',
-    body: { expectedHash: 'tag-before', selectors: [{ id: 10 }, { id: 11 }] },
+    body: { expectedHash: 'tag-before', selectors: [{ id: 11 }] },
   });
   await waitFor(() => assert.equal(dirty.at(-1), false));
   assert.equal(screen.queryByText('Team seasons'), null);
   assert.equal(screen.queryByText('Player-trainer assignments'), null);
 });
 
-test('preserves the edit revision across provider tabs and retains drafts after conflicts', async () => {
+test('preserves the edit revision across tabs and restores the saved selection after conflicts', async () => {
   let reads = 0;
   const request: Transport = async (path, options) => {
     if (options?.method === 'PUT') throw new ApiError(409, 'changed');
@@ -97,37 +108,24 @@ test('preserves the edit revision across provider tabs and retains drafts after 
     onDirtyChange: () => {},
   };
   const view = render(<BexioTagMappings {...props} active />);
-  await screen.findByLabelText('Trial: Other label (#11)');
-  fireEvent.click(screen.getByLabelText('Trial: Other label (#11)'));
+  await screen.findByLabelText('Trial');
+  fireEvent.change(screen.getByLabelText('Trial'), {
+    target: { value: '11' },
+  });
   view.rerender(<BexioTagMappings {...props} active={false} />);
   view.rerender(<BexioTagMappings {...props} active />);
   assert.equal(reads, 2);
-  fireEvent.click(
-    screen.getByRole('button', { name: 'Save Trial mapping', hidden: true }),
-  );
   await screen.findByRole('alert');
   assert.match(screen.getByRole('alert').textContent!, /changed elsewhere/);
   assert.equal(
-    (screen.getByLabelText('Trial: Other label (#11)') as HTMLInputElement)
-      .checked,
-    true,
-  );
-  const confirm = window.confirm;
-  window.confirm = () => false;
-  try {
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Reload Bexio labels' }),
-    );
-    assert.equal(reads, 2);
-  } finally {
-    window.confirm = confirm;
-  }
-  fireEvent.click(
-    screen.getByRole('button', { name: 'Reset Trial mapping', hidden: true }),
+    (screen.getByLabelText('Trial') as HTMLSelectElement).value,
+    '10',
   );
   assert.equal(
-    (screen.getByLabelText('Trial: Other label (#11)') as HTMLInputElement)
-      .checked,
-    false,
+    screen.queryByRole('button', { name: 'Save Trial mapping' }),
+    null,
   );
+  assert.equal(view.container.querySelector('details'), null);
+  fireEvent.click(screen.getByRole('button', { name: 'Reload Bexio labels' }));
+  await waitFor(() => assert.equal(reads, 4));
 });
