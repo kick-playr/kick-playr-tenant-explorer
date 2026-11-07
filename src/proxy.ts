@@ -1,16 +1,37 @@
-import { clerkMiddleware } from '@clerk/nextjs/server';
 import {
   NextResponse,
   type NextRequest,
   type NextFetchEvent,
 } from 'next/server';
-const middleware = clerkMiddleware();
-export default function proxy(request: NextRequest, event: NextFetchEvent) {
-  if (
-    !process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ||
-    !process.env.CLERK_SECRET_KEY
-  )
-    return NextResponse.next();
-  return middleware(request, event);
+import { resolveRealm } from './lib/server-realms';
+import { realmUnavailableResponse } from './lib/realm-unavailable';
+export default async function proxy(
+  request: NextRequest,
+  event: NextFetchEvent,
+) {
+  const result = await resolveRealm(request.headers.get('host') ?? '');
+  if (!result.ok)
+    return realmUnavailableResponse(
+      request.nextUrl.pathname.startsWith('/api/') ? 'json' : 'html',
+      result.error,
+    );
+  const realm = result.realm;
+  const { clerkMiddleware } = await import('@clerk/nextjs/server');
+  return clerkMiddleware(
+    () => NextResponse.next(),
+    () => ({
+      publishableKey: realm.publishableKey,
+      secretKey: realm.secretKey,
+      machineSecretKey: realm.machineSecretKey,
+    }),
+  )(request, event);
 }
-export const config = { matcher: ['/', '/sign-in(.*)', '/api/explorer(.*)'] };
+export const config = {
+  matcher: [
+    '/',
+    '/sign-in(.*)',
+    '/api/explorer(.*)',
+    '/api/vault-v2/:path*',
+    '/api/club-branding/:path*',
+  ],
+};

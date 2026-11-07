@@ -1,4 +1,5 @@
 'use client';
+import { TenantStaticSecrets } from './tenant-static-secrets';
 
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import {
@@ -26,7 +27,14 @@ import {
   PanelHeading,
   value,
 } from './ui';
+import { TenantDeletion } from './tenant-deletion';
+import { ManagerInvitations } from './manager-invitations';
+import { TenantProvisioning } from './tenant-provisioning';
 import { TenantKeys } from './tenant-keys';
+import {
+  tenantAdministratorPermissions,
+  hasTenantAdministratorPermissions,
+} from '../lib/tenant-permissions';
 
 const tabs = [
   'Overview',
@@ -35,7 +43,10 @@ const tabs = [
   'Keys',
   'Integrations',
   'Credentials',
+  'Static secrets',
   'Users',
+  'Invitations',
+  'Onboarding',
   'Audit',
 ] as const;
 type Tab = (typeof tabs)[number];
@@ -46,20 +57,24 @@ type Mutate = (
 ) => Promise<boolean>;
 export function TenantEditor({
   tenant,
+  staticVault = false,
   request,
   onUpdated,
   onBusyChange,
   dirty,
   setDirty,
   onReload,
+  onDeleted,
 }: {
   tenant: Tenant;
+  staticVault?: boolean;
   request: Transport;
   onUpdated: (tenant: Tenant) => void;
   onBusyChange: (value: boolean) => void;
   dirty: boolean;
   setDirty: (value: boolean) => void;
   onReload: () => void;
+  onDeleted?: () => void;
 }) {
   const [tab, setTab] = useState<Tab>('Overview');
   const [busy, setBusy] = useState(false);
@@ -85,6 +100,9 @@ export function TenantEditor({
           body: JSON.stringify({
             ...body,
             expectedRevision: tenant.configRevision,
+            ...(suffix.startsWith('/users/')
+              ? { expectedAuthorityRevision: tenant.authorityRevision }
+              : {}),
           }),
         },
       )) as Tenant;
@@ -118,6 +136,26 @@ export function TenantEditor({
     setSaved(false);
     setTab(next);
   }
+  if (tenant.deletionId)
+    return (
+      <section
+        className="detail-pane"
+        aria-label={`${tenant.public.name} deletion`}
+      >
+        <h1>{tenant.public.name}</h1>
+        <p>This tenant is read-only while marked for deletion.</p>
+        <TenantDeletion
+          environment={tenant.environment}
+          tenantId={tenant.id}
+          marked
+          request={request}
+          onReload={onReload}
+          onDeleted={onDeleted}
+          onBusyChange={onBusyChange}
+        />
+        <Audit tenant={tenant} request={request} />
+      </section>
+    );
   return (
     <section
       className="detail-pane"
@@ -139,6 +177,13 @@ export function TenantEditor({
         </div>
         <Badge value={tenant.status} />
       </div>
+      {tenant.status === 'in-rotation' && (
+        <Notice>
+          Tenant key migration is in progress. Normal traffic and configuration
+          changes remain blocked until verification completes. See operational
+          encryption keys for progress.
+        </Notice>
+      )}
       <div className="tenant-meta">
         <span>
           Configuration <strong>r{tenant.configRevision}</strong>
@@ -165,40 +210,42 @@ export function TenantEditor({
         </button>
       </div>
       <div className="tabs" role="tablist" aria-label="Tenant management">
-        {tabs.map((t) => (
-          <button
-            type="button"
-            key={t}
-            id={`tab-${t}`}
-            role="tab"
-            aria-label={t}
-            aria-selected={tab === t}
-            aria-controls="tenant-panel"
-            tabIndex={tab === t ? 0 : -1}
-            disabled={busy}
-            onClick={() => changeTab(t)}
-            onKeyDown={(event) => {
-              if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
-                event.preventDefault();
-                const next =
-                  tabs[
-                    (tabs.indexOf(t) +
-                      (event.key === 'ArrowRight' ? 1 : tabs.length - 1)) %
-                      tabs.length
-                  ]!;
-                changeTab(next);
-                document.getElementById(`tab-${next}`)?.focus();
-              }
-            }}
-          >
-            {t}
-            {t === 'Users' && (
-              <small>
-                {tenant.users.filter((u) => u.status === 'active').length}
-              </small>
-            )}
-          </button>
-        ))}
+        {tabs
+          .filter((t) => staticVault || t !== 'Static secrets')
+          .map((t) => (
+            <button
+              type="button"
+              key={t}
+              id={`tab-${t}`}
+              role="tab"
+              aria-label={t}
+              aria-selected={tab === t}
+              aria-controls="tenant-panel"
+              tabIndex={tab === t ? 0 : -1}
+              disabled={busy}
+              onClick={() => changeTab(t)}
+              onKeyDown={(event) => {
+                if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+                  event.preventDefault();
+                  const next =
+                    tabs[
+                      (tabs.indexOf(t) +
+                        (event.key === 'ArrowRight' ? 1 : tabs.length - 1)) %
+                        tabs.length
+                    ]!;
+                  changeTab(next);
+                  document.getElementById(`tab-${next}`)?.focus();
+                }
+              }}
+            >
+              {t}
+              {t === 'Users' && (
+                <small>
+                  {tenant.users.filter((u) => u.status === 'active').length}
+                </small>
+              )}
+            </button>
+          ))}
       </div>
       <div
         className="tab-content"
@@ -285,6 +332,15 @@ export function TenantEditor({
                   </Field>
                 </div>
               </SaveForm>
+              <TenantDeletion
+                environment={tenant.environment}
+                tenantId={tenant.id}
+                request={request}
+                onReload={onReload}
+                onDeleted={onDeleted}
+                disabled={busy || dirty}
+                onBusyChange={onBusyChange}
+              />
               {tenant.status === 'provisioning' && (
                 <Notice>
                   Set up the tenant’s runtime bindings, database and identity
@@ -486,6 +542,12 @@ export function TenantEditor({
               )}
             </>
           )}
+          {tab === 'Static secrets' && (
+            <TenantStaticSecrets
+              environment={tenant.environment}
+              tenantId={tenant.id}
+            />
+          )}
           {tab === 'Credentials' && (
             <>
               <PanelHeading
@@ -582,6 +644,15 @@ export function TenantEditor({
                         <div className="record-title">
                           <code>{user.subject}</code>
                           <Badge value={user.status} />
+                          {user.status === 'active' &&
+                            user.issuer === tenant.identityRealm &&
+                            hasTenantAdministratorPermissions(
+                              user.permissions,
+                            ) && (
+                              <span className="badge badge-enabled">
+                                Tenant administrator
+                              </span>
+                            )}
                         </div>
                         <p>
                           Contact #{user.contactId} <span>·</span>{' '}
@@ -628,6 +699,20 @@ export function TenantEditor({
                 </div>
               )}
             </>
+          )}
+          {tab === 'Invitations' && (
+            <ManagerInvitations
+              environment={tenant.environment}
+              tenantId={tenant.id}
+              request={request}
+            />
+          )}
+          {tab === 'Onboarding' && (
+            <TenantProvisioning
+              environment={tenant.environment}
+              tenantId={tenant.id}
+              request={request}
+            />
           )}
           {tab === 'Audit' && <Audit tenant={tenant} request={request} />}
         </div>
@@ -929,6 +1014,14 @@ function UserForm({
   mutate: Mutate;
   onDirty: () => void;
 }) {
+  const [permissions, setPermissions] = useState(
+    existing?.permissions.join('\n') ?? '',
+  );
+  const entries = permissions
+    .split(/\r?\n/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const administrator = hasTenantAdministratorPermissions(entries);
   return (
     <SaveForm
       busy={busy}
@@ -977,15 +1070,45 @@ function UserForm({
           </select>
         </Field>
       </div>
+      <label className="checkbox-field">
+        <input
+          type="checkbox"
+          checked={administrator}
+          onChange={(event) => {
+            setPermissions(
+              event.target.checked
+                ? [
+                    ...new Set([...entries, ...tenantAdministratorPermissions]),
+                  ].join('\n')
+                : entries
+                    .filter(
+                      (p) =>
+                        p !== 'club:*:*' &&
+                        !tenantAdministratorPermissions.some(
+                          (required) => required === p,
+                        ),
+                    )
+                    .join('\n'),
+            );
+            onDirty();
+          }}
+        />
+        Tenant administrator
+      </label>
+      <p className="field-hint">
+        Adds the permissions needed for club settings, integration credentials
+        and OAuth. Existing Bexio administrator checks still apply.
+      </p>
       <Field
         label="Tenant permissions"
-        hint="One club:* permission per line. Platform privileges cannot be assigned here."
+        hint="One club permission per line. Use club:*:* for all currently supported club permissions in this tenant; platform privileges are excluded."
       >
         <textarea
           className="code-input"
           name="permissions"
           rows={6}
-          defaultValue={existing?.permissions.join('\n')}
+          value={permissions}
+          onChange={(event) => setPermissions(event.target.value)}
           placeholder={'club:teams:read\nclub:settings:read'}
         />
       </Field>

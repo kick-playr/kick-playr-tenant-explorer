@@ -1,0 +1,7 @@
+# Club branding and custom theme
+
+Add complete encrypted settings `branding` object for each club, authorized by existing club settings read/write permissions and expectedHash CAS. Optional display name, light/dark logos and favicons, custom theme name/mode and seven semantic colors. Upload PNG/JPEG/WebP/ICO favicon locally; resize/reencode to bounded raster data (max8KiB each,256pxlogo/64pxfavicon). RootAPI fully decodes/validates assets, MIME/dimensions/base64/limits and WCAG4.5 text contrast before writes. User saves only via existing Save club settings; no automatic data migration or live fixture writes.
+
+Settings→Appearance dedicated editor with source filecontrols, image/contrast previews, removal and defaultreset. Branding loads via authenticated lightweight endpoint; styles and logo/favicons are scoped to the selected club provider and cleared on switching. Optional Custom theme switcher choice appears only for a configured club; builtins remain. Custom CSS derives all remaining palette tokens; no external CSS/URLs. Authenticated same-origin favicon asset route serves only bounded saved image data with privatecache and version hashes. Drafts do not alter active branding.
+
+Validate API/bridge/UI scopes, image/contrast errors, CAS/crossclub isolation, context reset/theme/favicons, drafts/reset/uploadpending. Diagnose existing runtime401 with fixed safe reason logs before browserverification. No auth weakening, secret exposure, service restarts except earlier user-authorized owned stack reload to load code. Independent review before completion.

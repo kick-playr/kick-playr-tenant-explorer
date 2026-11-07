@@ -168,3 +168,358 @@ test('proxy admits tenant key inspection without admitting arbitrary file paths'
   );
   assert.equal(result.status, 200);
 });
+
+test('club proxy routes reach club endpoints without granting platform access', async () => {
+  let called = '';
+  const result = await proxyRequest(
+    new Request(
+      'http://localhost:3002/api/explorer/clubs/development/winikon/settings',
+    ),
+    ['clubs', 'development', 'winikon', 'settings'],
+    'session',
+    'http://127.0.0.1:3003',
+    async (url) => {
+      called = String(url);
+      return Response.json({ hash: 'one' });
+    },
+  );
+  assert.equal(result.status, 200);
+  assert.equal(
+    called,
+    'http://127.0.0.1:3003/api/club/tenants/development/winikon/settings',
+  );
+  const invalid = await proxyRequest(
+    new Request(
+      'http://localhost:3002/api/explorer/clubs/development/winikon/keys',
+    ),
+    ['clubs', 'development', 'winikon', 'keys'],
+    'session',
+    'http://127.0.0.1:3003',
+  );
+  assert.equal(invalid.status, 400);
+});
+
+test('club writes validate Origin against the public Host, not the internal Next URL or forwarded headers', async () => {
+  for (const [origin, host, status] of [
+    [
+      'http://fcrww.explorer.localhost:3002',
+      'fcrww.explorer.localhost:3002',
+      200,
+    ],
+    ['http://localhost:3002', 'fcrww.explorer.localhost:3002', 403],
+    ['https://foreign.example', 'fcrww.explorer.localhost:3002', 403],
+    ['https://foreign.example', 'fcrww.explorer.localhost:3002/path', 403],
+  ] as const) {
+    let dispatched = false;
+    const response = await proxyRequest(
+      new Request(
+        'http://localhost:3002/api/explorer/clubs/development/fcrww/integrations/bexio/connect',
+        {
+          method: 'POST',
+          headers: {
+            host,
+            origin,
+            'x-forwarded-host': 'foreign.example',
+            'content-type': 'application/json',
+          },
+          body: '{}',
+        },
+      ),
+      ['clubs', 'development', 'fcrww', 'integrations', 'bexio', 'connect'],
+      'verified-session',
+      'http://127.0.0.1:3003',
+      async () => {
+        dispatched = true;
+        return Response.json({ url: 'https://auth.bexio.com/' });
+      },
+    );
+    assert.equal(response.status, status);
+    assert.equal(dispatched, status === 200);
+  }
+});
+
+test('club catalog bridge exposes label mappings but refuses operational team routes and flags', async () => {
+  const calls: string[] = [];
+  const transport: typeof fetch = async (url) => {
+    calls.push(String(url));
+    return Response.json({ id: 'catalog', hash: 'one', items: [] });
+  };
+  for (const suffix of [
+    'catalog/categories',
+    'catalog/branches/flags/isTrial',
+  ]) {
+    const path = `clubs/development/fcrww/${suffix}`;
+    const request = new Request(
+      `http://fcrww.explorer.localhost:3002/api/explorer/${path}`,
+      {
+        method: suffix.includes('flags') ? 'PUT' : 'GET',
+        ...(suffix.includes('flags')
+          ? {
+              headers: {
+                origin: 'http://fcrww.explorer.localhost:3002',
+                'content-type': 'application/json',
+              },
+              body: JSON.stringify({ expectedHash: 'one', selectors: [] }),
+            }
+          : {}),
+      },
+    );
+    assert.equal(
+      (
+        await proxyRequest(
+          request,
+          path.split('/'),
+          'synthetic-token',
+          'http://localhost:3003',
+          transport,
+        )
+      ).status,
+      200,
+    );
+  }
+  for (const suffix of [
+    'catalog/categories/teams',
+    'catalog/categories/coaches1418',
+    'catalog/branches/player-trainers',
+    'catalog/categories/flags/isTeam',
+    'catalog/categories/flags/isAdmin',
+    'catalog/branches/flags/isKiosk',
+  ]) {
+    const path = `clubs/development/fcrww/${suffix}`;
+    assert.equal(
+      (
+        await proxyRequest(
+          new Request('http://localhost:3002'),
+          path.split('/'),
+          'synthetic-token',
+          'http://localhost:3003',
+          transport,
+        )
+      ).status,
+      400,
+    );
+  }
+  assert.equal(calls.length, 2);
+  assert.equal(
+    calls[1],
+    'http://localhost:3003/api/club/tenants/development/fcrww/catalog/branches/flags/isTrial',
+  );
+});
+
+test('proxy admits only bounded invitation management routes', async () => {
+  for (const suffix of [
+    [],
+    ['abc-123', 'resend'],
+    ['abc-123', 'deliver'],
+    ['abc-123', 'revoke'],
+  ]) {
+    const result = await proxyRequest(
+      new Request('http://localhost:3002/api/explorer/test'),
+      ['tenants', 'development', 'club', 'invitations', ...suffix],
+      'token',
+      'http://127.0.0.1:3003',
+      async () => Response.json([]),
+    );
+    assert.equal(result.status, 200);
+  }
+  const result = await proxyRequest(
+    new Request('http://localhost:3002/api/explorer/test'),
+    ['tenants', 'development', 'club', 'invitations', 'id', 'activate'],
+    'token',
+    'http://127.0.0.1:3003',
+    async () => {
+      throw Error('not called');
+    },
+  );
+  assert.equal(result.status, 400);
+});
+
+test('MongoDB provisioning URL uses only the fixed authenticated same-origin proxy route', async () => {
+  let calls = 0;
+  const body = JSON.stringify({
+    uri: 'mongodb://user:CANARY_SECRET@cluster.invalid/demo?tls=true&authSource=admin',
+    expectedRevision: 'a'.repeat(64),
+  });
+  const segments = [
+    'tenants',
+    'development',
+    'demo',
+    'onboarding',
+    'mongo-url',
+  ];
+  const transport = (async (url: RequestInfo | URL, options?: RequestInit) => {
+    calls++;
+    assert.equal(
+      String(url),
+      'http://127.0.0.1:3003/api/platform/tenants/development/demo/onboarding/mongo-url',
+    );
+    assert.equal(
+      new Headers(options?.headers).get('authorization'),
+      'Bearer token',
+    );
+    assert.equal(new TextDecoder().decode(options?.body as ArrayBuffer), body);
+    return Response.json({ configured: true, source: 'pending' });
+  }) as typeof fetch;
+  const make = (origin: string) =>
+    new Request('https://explorer.example/api/platform/' + segments.join('/'), {
+      method: 'POST',
+      headers: { origin, 'content-type': 'application/json' },
+      body,
+    });
+  const response = await proxyRequest(
+    make('https://explorer.example'),
+    segments,
+    'token',
+    'http://127.0.0.1:3003',
+    transport,
+  );
+  assert.equal(response.status, 200);
+  assert.ok(!JSON.stringify(await response.json()).includes('CANARY_SECRET'));
+  assert.equal(
+    (
+      await proxyRequest(
+        make('https://foreign.example'),
+        segments,
+        'token',
+        'http://127.0.0.1:3003',
+        transport,
+      )
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await proxyRequest(
+        make('https://explorer.example'),
+        [...segments, 'export'],
+        'token',
+        'http://127.0.0.1:3003',
+        transport,
+      )
+    ).status,
+    400,
+  );
+  assert.equal(calls, 1);
+});
+
+test('key registration uses the fixed authenticated proxy route', async () => {
+  const path = [
+    'tenants',
+    'development',
+    'demo',
+    'onboarding',
+    'configure-keys',
+  ];
+  const result = await proxyRequest(
+    new Request('https://explorer.example/api/platform/' + path.join('/'), {
+      method: 'POST',
+      headers: {
+        origin: 'https://explorer.example',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ expectedRevision: 'a'.repeat(64) }),
+    }),
+    path,
+    'token',
+    'http://127.0.0.1:3003',
+    async (url, options) => {
+      assert.equal(
+        String(url),
+        'http://127.0.0.1:3003/api/platform/' + path.join('/'),
+      );
+      assert.equal(
+        new Headers(options?.headers).get('authorization'),
+        'Bearer token',
+      );
+      return Response.json({ registered: true });
+    },
+  );
+  assert.equal(result.status, 200);
+});
+
+test('deletion proxy forwards only fixed tenant deletion actions with the signed-in session', async () => {
+  for (const action of ['', 'recover', 'purge']) {
+    const segments = [
+      'tenants',
+      'development',
+      'club',
+      'deletion',
+      ...(action ? [action] : []),
+    ];
+    let forwarded = '';
+    const response = await proxyRequest(
+      new Request('http://localhost:3002/api/explorer/' + segments.join('/'), {
+        method: 'POST',
+        headers: {
+          origin: 'http://localhost:3002',
+          'content-type': 'application/json',
+        },
+        body: '{}',
+      }),
+      segments,
+      'session',
+      'http://127.0.0.1:3003',
+      async (url) => {
+        forwarded = String(url);
+        return Response.json({ operation: { phase: 'retained' } });
+      },
+    );
+    assert.equal(response.status, 200);
+    assert.equal(
+      forwarded,
+      'http://127.0.0.1:3003/api/platform/' + segments.join('/'),
+    );
+  }
+});
+test('rotation progress proxy is authenticated and read-only at the fixed platform endpoint', async () => {
+  const segments = ['tenants', 'development', 'club', 'key-rotation'];
+  let calls = 0;
+  const transport: typeof fetch = async (input, init) => {
+    calls++;
+    assert.equal(
+      String(input),
+      'http://127.0.0.1:3003/api/platform/tenants/development/club/key-rotation',
+    );
+    assert.equal(
+      new Headers(init?.headers).get('Authorization'),
+      'Bearer operator-token',
+    );
+    return Response.json({ rotation: null });
+  };
+  assert.equal(
+    (
+      await proxyRequest(
+        new Request('http://localhost/status'),
+        segments,
+        null,
+        'http://127.0.0.1:3003',
+        transport,
+      )
+    ).status,
+    401,
+  );
+  for (const method of ['POST', 'DELETE', 'HEAD'])
+    assert.equal(
+      (
+        await proxyRequest(
+          new Request('http://localhost/status', { method }),
+          segments,
+          'operator-token',
+          'http://127.0.0.1:3003',
+          transport,
+        )
+      ).status,
+      400,
+    );
+  assert.equal(calls, 0);
+  const response = await proxyRequest(
+    new Request('http://localhost/status'),
+    segments,
+    'operator-token',
+    'http://127.0.0.1:3003',
+    transport,
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { rotation: null });
+  assert.equal(calls, 1);
+});

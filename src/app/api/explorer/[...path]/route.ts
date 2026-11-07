@@ -1,6 +1,7 @@
-import { auth } from '@clerk/nextjs/server';
+import { serverApiOrigin } from '@/lib/server-api-origin';
 import { proxyRequest } from '@/lib/proxy';
-import { clerkConfigured, isPlatformAdmin } from '@/lib/platform';
+import { resolveRealm } from '@/lib/server-realms';
+import { realmUnavailableResponse } from '@/lib/realm-unavailable';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -8,27 +9,34 @@ async function handle(
   request: Request,
   context: { params: Promise<{ path: string[] }> },
 ) {
-  if (!clerkConfigured())
-    return Response.json(
-      { message: 'Configure Clerk on the explorer server' },
-      { status: 503 },
-    );
+  const result = await resolveRealm(request.headers.get('host') ?? '');
+  if (!result.ok) return realmUnavailableResponse('json', result.error);
+  const { auth } = await import('@clerk/nextjs/server');
   const session = await auth();
   if (!session.userId)
     return Response.json(
       { message: 'Sign in to the tenant explorer' },
       { status: 401 },
     );
-  if (!isPlatformAdmin(session.userId))
+  const path = (await context.params).path;
+  let token: string | null;
+  try {
+    // The runtime requires a session-bound token with sid and custom aud.
+    token = await session.getToken();
+  } catch {
     return Response.json(
-      { message: 'Platform administrator access is required' },
-      { status: 403 },
+      {
+        message:
+          'Club sign-in token is unavailable; check its Clerk configuration',
+      },
+      { status: 503 },
     );
+  }
   return proxyRequest(
     request,
-    (await context.params).path,
-    await session.getToken(),
-    process.env.EXPLORER_API_ORIGIN ?? '',
+    path,
+    token,
+    await serverApiOrigin().catch(() => ''),
   );
 }
 export {

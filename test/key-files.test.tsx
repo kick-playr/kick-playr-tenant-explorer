@@ -77,3 +77,36 @@ test('shows an unbound reference instead of implying a key is connected', async 
   );
   await screen.findByText(/No key sources are bound/);
 });
+
+test('vault metadata explains pinned versions and restart recovery without environment remediation', async () => {
+  render(
+    <TenantKeys
+      environment="development"
+      tenantId="club"
+      request={async () => ({
+        reference: 'workflow-local:club:key',
+        strategy: 'LOCAL_KEYVAULT',
+        status: 'unavailable',
+        requiresRestart: true,
+        version: 'v1',
+        files: [
+          {
+            kind: 'wrapping',
+            source: 'vault',
+            variable: 'CLUB_WRAPPING_KEY_V1',
+            version: 'immutable-version',
+            status: 'unreadable',
+          },
+        ],
+      })}
+    />,
+  );
+  await screen.findByText('Local Key Vault');
+  assert.ok(screen.getByText('immutable-version'));
+  assert.ok(screen.getByText(/restart the affected applications/i));
+  assert.equal(screen.queryByText('Server environment variable'), null);
+  assert.equal(
+    screen.queryByText(/Missing or invalid environment values/),
+    null,
+  );
+});

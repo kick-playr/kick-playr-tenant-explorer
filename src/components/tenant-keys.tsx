@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { ArrowPathIcon } from '@heroicons/react/24/outline';
 import { tenantPath, type Transport } from '../lib/api';
 import type { TenantKeyFiles } from '../lib/types';
+import { TenantKeyRotation } from './tenant-key-rotation';
 import { Badge, ErrorText, Notice, PanelHeading } from './ui';
 
 const descriptions = {
@@ -20,22 +21,35 @@ export function TenantKeys({
   tenantId: string;
   request: Transport;
 }) {
-  const [result, setResult] = useState<TenantKeyFiles | null>(null);
-  const [error, setError] = useState<unknown>();
   const [refresh, setRefresh] = useState(0);
+  const context = `${environment}/${tenantId}`;
+  const [response, setResponse] = useState<{
+    context: string;
+    refresh: number;
+    result?: TenantKeyFiles;
+    error?: unknown;
+  }>();
+  const current =
+    response?.context === context && response?.refresh === refresh
+      ? response
+      : undefined;
+  const result = current?.result;
+  const error = current?.error;
   useEffect(() => {
     const controller = new AbortController();
     request(`${tenantPath(environment, tenantId)}/keys`, {
       signal: controller.signal,
     })
       .then((data) => {
-        if (!controller.signal.aborted) setResult(data as TenantKeyFiles);
+        if (!controller.signal.aborted)
+          setResponse({ context, refresh, result: data as TenantKeyFiles });
       })
       .catch((error) => {
-        if (!controller.signal.aborted) setError(error);
+        if (!controller.signal.aborted)
+          setResponse({ context, refresh, error });
       });
     return () => controller.abort();
-  }, [environment, tenantId, request, refresh]);
+  }, [environment, tenantId, context, request, refresh]);
   return (
     <>
       <PanelHeading
@@ -46,8 +60,6 @@ export function TenantKeys({
             className="button secondary small"
             disabled={!result && !error}
             onClick={() => {
-              setResult(null);
-              setError(undefined);
               setRefresh((n) => n + 1);
             }}
           >
@@ -64,9 +76,19 @@ export function TenantKeys({
         </p>
       ) : (
         <>
+          {result.strategy === 'LOCAL_KEYVAULT' && (
+            <TenantKeyRotation
+              environment={environment}
+              tenantId={tenantId}
+              request={request}
+            />
+          )}
           <div className="key-binding-summary">
             <code>{result.reference}</code>
             <Badge value={result.status} />
+            {result.strategy === 'LOCAL_KEYVAULT' && (
+              <span>Local Key Vault</span>
+            )}
           </div>
           {result.status === 'unbound' ? (
             <Notice>
@@ -87,9 +109,9 @@ export function TenantKeys({
               </Notice>
               {result.status === 'unavailable' && (
                 <Notice error>
-                  Some key sources need attention. Missing or invalid
-                  environment values, or unsafe legacy files, must be corrected
-                  on the API server.
+                  {result.strategy === 'LOCAL_KEYVAULT'
+                    ? 'Check the vault namespace, read permissions and migration status. Live consumers refresh automatically. For consumers still using startup configuration, restart the affected applications after correcting their configuration.'
+                    : 'Some key sources need attention. Missing or invalid environment values, or unsafe legacy files, must be corrected on the API server.'}
                 </Notice>
               )}
               <div className="record-list">
@@ -106,13 +128,23 @@ export function TenantKeys({
                     <p>{descriptions[file.kind]}</p>
                     <dl>
                       <dt>
-                        {file.source === 'environment'
-                          ? 'Server environment variable'
-                          : 'File on API server'}
+                        {file.source === 'vault'
+                          ? 'Vault mapping'
+                          : file.source === 'environment'
+                            ? 'Server environment variable'
+                            : 'File on API server'}
                       </dt>
                       <dd>
                         <code>{file.variable ?? file.path}</code>
                       </dd>
+                      {file.version && (
+                        <>
+                          <dt>Loaded vault version</dt>
+                          <dd>
+                            <code>{file.version}</code>
+                          </dd>
+                        </>
+                      )}
                       {file.fingerprint && (
                         <>
                           <dt>SHA-256 fingerprint</dt>

@@ -1,5 +1,6 @@
 'use client';
 
+import { BrandLogo } from './theme-logo';
 import Link from 'next/link';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
@@ -15,7 +16,7 @@ import {
 import { apiRequest, tenantPath, type Transport } from '../lib/api';
 import {
   environments,
-  statuses,
+  readonlyStatuses,
   type Tenant,
   type TenantList,
   type TenantSummary,
@@ -26,9 +27,11 @@ import { Empty, TenantEditor } from './tenant-editor';
 import { ThemeSwitcher } from './theme-switcher';
 
 export function Explorer({
+  staticVault = false,
   request = apiRequest,
   account,
 }: {
+  staticVault?: boolean;
   request?: Transport;
   account?: ReactNode;
 }) {
@@ -47,9 +50,14 @@ export function Explorer({
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editorEpoch, setEditorEpoch] = useState(0);
+  const [deletionNotice, setDeletionNotice] = useState('');
+  const editorGeneration = useRef(0);
+  const welcomeHeading = useRef<HTMLHeadingElement>(null);
   const detailRequest = useRef<AbortController | null>(null);
+  const listRequest = useRef<AbortController | null>(null);
   useEffect(() => {
     const controller = new AbortController();
+    listRequest.current = controller;
     const timeout = window.setTimeout(
       () => {
         setListLoading(true);
@@ -60,7 +68,8 @@ export function Explorer({
         });
         if (query) params.set('search', query);
         if (environment) params.set('environment', environment);
-        if (status) params.set('status', status);
+        if (status === 'deleted') params.set('deletion', 'only');
+        else if (status) params.set('status', status);
         request(`tenants?${params}`, { signal: controller.signal })
           .then((data) => {
             if (!controller.signal.aborted) setList(data as TenantList);
@@ -89,25 +98,43 @@ export function Explorer({
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
   }, [dirty]);
-  useEffect(() => () => detailRequest.current?.abort(), []);
+  useEffect(() => {
+    if (deletionNotice && !selected) welcomeHeading.current?.focus();
+  }, [deletionNotice, selected]);
+  useEffect(
+    () => () => {
+      editorGeneration.current++;
+      detailRequest.current?.abort();
+    },
+    [],
+  );
+  function invalidateEditor() {
+    detailRequest.current?.abort();
+    const generation = ++editorGeneration.current;
+    setEditorEpoch(generation);
+    return generation;
+  }
   async function open(summary: TenantSummary) {
     if (saving) return;
     if (dirty && !window.confirm('Discard unsaved changes?')) return;
-    detailRequest.current?.abort();
+    const generation = invalidateEditor();
     const controller = new AbortController();
     detailRequest.current = controller;
     setDirty(false);
     setSelected(summary);
     setTenant(null);
     setDetailError(undefined);
+    setDeletionNotice('');
     try {
       const detail = (await request(
         tenantPath(summary.environment, summary.id),
         { signal: controller.signal },
       )) as Tenant;
-      if (!controller.signal.aborted) setTenant(detail);
+      if (!controller.signal.aborted && generation === editorGeneration.current)
+        setTenant(detail);
     } catch (error) {
-      if (!controller.signal.aborted) setDetailError(error);
+      if (!controller.signal.aborted && generation === editorGeneration.current)
+        setDetailError(error);
     }
   }
   function updated(next: Tenant) {
@@ -124,6 +151,24 @@ export function Explorer({
         : previous,
     );
   }
+  function deleted() {
+    invalidateEditor();
+    listRequest.current?.abort();
+    setSelected(null);
+    setTenant(null);
+    setDetailError(undefined);
+    setDirty(false);
+    setSaving(false);
+    setList(null);
+    setListError(undefined);
+    setListLoading(true);
+    setPage(1);
+    setRefresh((n) => n + 1);
+    setDeletionNotice('Tenant deleted. Select another tenant to continue.');
+  }
+  // Every editor callback captures its generation. Late async completions from
+  // an unmounted editor must not restore selection or unlock a newer mutation.
+  const currentEditor = () => editorEpoch === editorGeneration.current;
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -132,12 +177,7 @@ export function Explorer({
           href="/"
           aria-label="Kick Playr Tenant Explorer"
         >
-          <span className="brand-mark">
-            k<span>.</span>
-          </span>
-          <span>
-            KICK PLAYR<small>Platform console</small>
-          </span>
+          <BrandLogo priority />
         </Link>
         <div className="sidebar-label">WORKSPACE</div>
         <div className="nav-active">
@@ -179,7 +219,7 @@ export function Explorer({
       <div className="workspace">
         <header className="topbar">
           <div className="breadcrumb">
-            Workspace <span>/</span> <strong>Tenants</strong>
+            Platform directory <span>/</span> <strong>Tenants</strong>
           </div>
           <div className="account">
             <ThemeSwitcher />
@@ -192,20 +232,17 @@ export function Explorer({
         </header>
         <main>
           <div className="page-heading">
-            <div>
-              <div className="eyebrow">PLATFORM DIRECTORY</div>
-              <h1>
-                Tenant explorer<span>.</span>
-              </h1>
-              <p>Every club. One place to keep things running.</p>
-            </div>
+            <h1>
+              Tenant explorer<span>.</span>
+            </h1>
+            <p>Every club. One place to keep things running.</p>
             <button
               className="button primary"
               disabled={saving}
               onClick={() => {
                 if (!dirty || window.confirm('Discard unsaved changes?')) {
                   setDirty(false);
-                  setEditorEpoch((n) => n + 1);
+                  invalidateEditor();
                   setCreating(true);
                 }
               }}
@@ -250,10 +287,14 @@ export function Explorer({
               }}
             >
               <option value="">All statuses</option>
-              {statuses.map((s) => (
+              {readonlyStatuses.map((s) => (
                 <option key={s}>{s}</option>
               ))}
+              <option value="deleted">Marked for deletion</option>
             </select>
+          </div>
+          <div role="status" aria-live="polite">
+            {deletionNotice}
           </div>
           <div
             className={`directory-layout ${selected ? 'has-selection' : ''}`}
@@ -307,7 +348,7 @@ export function Explorer({
                       </div>
                       <p>{t.hostname}</p>
                       <div className="tenant-row-bottom">
-                        <Badge value={t.status} />
+                        <Badge value={t.deletionId ? 'deleted' : t.status} />
                         <span>{t.environment}</span>
                       </div>
                     </button>
@@ -356,7 +397,7 @@ export function Explorer({
                   disabled={saving}
                   onClick={() => {
                     if (!dirty || window.confirm('Discard unsaved changes?')) {
-                      detailRequest.current?.abort();
+                      invalidateEditor();
                       setSelected(null);
                       setTenant(null);
                       setDirty(false);
@@ -380,12 +421,27 @@ export function Explorer({
                   <TenantEditor
                     key={`${selected.environment}/${selected.id}/${editorEpoch}`}
                     tenant={tenant}
+                    staticVault={staticVault}
                     request={request}
-                    onUpdated={updated}
-                    onBusyChange={setSaving}
+                    onUpdated={(next) => {
+                      if (currentEditor()) updated(next);
+                    }}
+                    onBusyChange={(busy) => {
+                      if (currentEditor()) setSaving(busy);
+                    }}
                     dirty={dirty}
-                    setDirty={setDirty}
-                    onReload={() => void open(selected)}
+                    setDirty={(next) => {
+                      if (currentEditor()) setDirty(next);
+                    }}
+                    onDeleted={() => {
+                      if (currentEditor()) deleted();
+                    }}
+                    onReload={() => {
+                      if (!currentEditor()) return;
+                      setPage(1);
+                      setRefresh((n) => n + 1);
+                      void open(selected);
+                    }}
                   />
                 ) : (
                   <div className="detail-loading" role="status">
@@ -401,7 +457,9 @@ export function Explorer({
                   <span className="graphic-dot two" />
                 </div>
                 <div className="eyebrow">A HOME FOR EVERY CLUB</div>
-                <h2>A clear view of your platform.</h2>
+                <h2 ref={welcomeHeading} tabIndex={-1}>
+                  A clear view of your platform.
+                </h2>
                 <p>
                   Select a tenant to manage its domains, configuration,
                   connections and people.
@@ -432,12 +490,13 @@ export function Explorer({
           request={request}
           onClose={() => setCreating(false)}
           onCreated={(created) => {
-            detailRequest.current?.abort();
+            invalidateEditor();
             setCreating(false);
             setDirty(false);
             setSelected(created);
             setTenant(created);
             setDetailError(undefined);
+            setDeletionNotice('');
             setRefresh((n) => n + 1);
           }}
         />
