@@ -1,4 +1,5 @@
 'use client';
+import { TenantStaticSecrets } from './tenant-static-secrets';
 import Link from 'next/link';
 import { ClubBrandingProvider } from './club-branding-provider';
 import { validateBranding, type ClubBranding } from '../lib/club-branding';
@@ -20,10 +21,12 @@ export interface ClubSummary {
 
 export function ClubExplorer({
   clubs,
+  staticVault = false,
   account,
   request = apiRequest,
 }: {
   clubs: ClubSummary[];
+  staticVault?: boolean;
   account?: ReactNode;
   request?: Transport;
 }) {
@@ -35,7 +38,9 @@ export function ClubExplorer({
     else connectionDrafts.current.delete(id);
     setDirty(connectionDrafts.current.size > 0);
   }
-  const [tab, setTab] = useState<'settings' | 'integrations'>('settings');
+  const [tab, setTab] = useState<
+    'settings' | 'integrations' | 'static-secrets'
+  >('settings');
   const [settingsSection, setSettingsSection] = useState('seasons');
   const [integrationSection, setIntegrationSection] = useState('');
   const [settings, setSettings] = useState<ClubSettingsSnapshot | null>(null);
@@ -51,6 +56,7 @@ export function ClubExplorer({
   } | null>(null);
   const path = `clubs/${encodeURIComponent(selected.environment)}/${encodeURIComponent(selected.id)}`;
   useEffect(() => {
+    if (tab === 'static-secrets') return;
     const abort = new AbortController();
     request(`${path}/${tab}`, { signal: abort.signal })
       .then((value) => {
@@ -203,7 +209,13 @@ export function ClubExplorer({
             )}
             <section className="detail-pane" aria-label="Club administration">
               <div className="tabs" aria-label="Club sections">
-                {(['settings', 'integrations'] as const).map((t) => (
+                {(
+                  [
+                    'settings',
+                    'integrations',
+                    ...(staticVault ? ['static-secrets' as const] : []),
+                  ] as const
+                ).map((t) => (
                   <button
                     key={t}
                     aria-pressed={tab === t}
@@ -217,7 +229,11 @@ export function ClubExplorer({
                       });
                     }}
                   >
-                    {t === 'settings' ? 'Settings' : 'Integrations'}
+                    {t === 'settings'
+                      ? 'Settings'
+                      : t === 'static-secrets'
+                        ? 'Static secrets'
+                        : 'Integrations'}
                   </button>
                 ))}
               </div>
@@ -236,6 +252,12 @@ export function ClubExplorer({
                   </Notice>
                 )}
                 {saved && <p role="status">Saved.</p>}
+                {tab === 'static-secrets' && (
+                  <TenantStaticSecrets
+                    environment={selected.environment}
+                    tenantId={selected.id}
+                  />
+                )}
                 {tab === 'settings' &&
                   (!settings ? (
                     error ? null : (

@@ -31,6 +31,7 @@ export const config = {
     '/',
     '/sign-in(.*)',
     '/api/explorer(.*)',
+    '/api/vault-v2/:path*',
     '/api/club-branding/:path*',
   ],
 };

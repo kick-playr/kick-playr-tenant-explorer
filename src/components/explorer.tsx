@@ -27,9 +27,11 @@ import { Empty, TenantEditor } from './tenant-editor';
 import { ThemeSwitcher } from './theme-switcher';
 
 export function Explorer({
+  staticVault = false,
   request = apiRequest,
   account,
 }: {
+  staticVault?: boolean;
   request?: Transport;
   account?: ReactNode;
 }) {
@@ -419,6 +421,7 @@ export function Explorer({
                   <TenantEditor
                     key={`${selected.environment}/${selected.id}/${editorEpoch}`}
                     tenant={tenant}
+                    staticVault={staticVault}
                     request={request}
                     onUpdated={(next) => {
                       if (currentEditor()) updated(next);

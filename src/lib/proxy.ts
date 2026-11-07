@@ -14,7 +14,8 @@ export async function proxyRequest(
     );
   if (!token) return fail(401, 'Sign in to the tenant explorer');
   const path = segments.join('/');
-  const club =
+  const callback = /^clubs\/(development|test|preview|production)\/[a-z0-9][a-z0-9-]{0,63}\/integrations\/(bexio|dropbox)\/callback$/.test(path);
+  const club = callback ||
     /^clubs(?:\/(development|test|preview|production)\/[a-z0-9][a-z0-9-]{0,63}\/(?:catalog\/(?:categories|branches)(?:\/flags\/[A-Za-z][A-Za-z0-9]{0,63})?|branding|settings|integrations(?:\/[a-z0-9][a-z0-9-]{0,63}(?:\/connect)?)?))?$/.test(
       path,
     );
@@ -62,6 +63,7 @@ export async function proxyRequest(
     return fail(503, 'Configure EXPLORER_API_ORIGIN on the explorer server');
   }
   const incoming = new URL(request.url);
+  if (callback && request.method !== 'GET') return fail(405,'OAuth callbacks require GET');
   const mutation = !['GET', 'HEAD'].includes(request.method);
   if (mutation) {
     // Next can use its internal listener address in request.url. The browser's

@@ -1,4 +1,5 @@
 'use client';
+import { TenantStaticSecrets } from './tenant-static-secrets';
 
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import {
@@ -42,6 +43,7 @@ const tabs = [
   'Keys',
   'Integrations',
   'Credentials',
+  'Static secrets',
   'Users',
   'Invitations',
   'Onboarding',
@@ -55,6 +57,7 @@ type Mutate = (
 ) => Promise<boolean>;
 export function TenantEditor({
   tenant,
+  staticVault = false,
   request,
   onUpdated,
   onBusyChange,
@@ -64,6 +67,7 @@ export function TenantEditor({
   onDeleted,
 }: {
   tenant: Tenant;
+  staticVault?: boolean;
   request: Transport;
   onUpdated: (tenant: Tenant) => void;
   onBusyChange: (value: boolean) => void;
@@ -206,40 +210,42 @@ export function TenantEditor({
         </button>
       </div>
       <div className="tabs" role="tablist" aria-label="Tenant management">
-        {tabs.map((t) => (
-          <button
-            type="button"
-            key={t}
-            id={`tab-${t}`}
-            role="tab"
-            aria-label={t}
-            aria-selected={tab === t}
-            aria-controls="tenant-panel"
-            tabIndex={tab === t ? 0 : -1}
-            disabled={busy}
-            onClick={() => changeTab(t)}
-            onKeyDown={(event) => {
-              if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
-                event.preventDefault();
-                const next =
-                  tabs[
-                    (tabs.indexOf(t) +
-                      (event.key === 'ArrowRight' ? 1 : tabs.length - 1)) %
-                      tabs.length
-                  ]!;
-                changeTab(next);
-                document.getElementById(`tab-${next}`)?.focus();
-              }
-            }}
-          >
-            {t}
-            {t === 'Users' && (
-              <small>
-                {tenant.users.filter((u) => u.status === 'active').length}
-              </small>
-            )}
-          </button>
-        ))}
+        {tabs
+          .filter((t) => staticVault || t !== 'Static secrets')
+          .map((t) => (
+            <button
+              type="button"
+              key={t}
+              id={`tab-${t}`}
+              role="tab"
+              aria-label={t}
+              aria-selected={tab === t}
+              aria-controls="tenant-panel"
+              tabIndex={tab === t ? 0 : -1}
+              disabled={busy}
+              onClick={() => changeTab(t)}
+              onKeyDown={(event) => {
+                if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+                  event.preventDefault();
+                  const next =
+                    tabs[
+                      (tabs.indexOf(t) +
+                        (event.key === 'ArrowRight' ? 1 : tabs.length - 1)) %
+                        tabs.length
+                    ]!;
+                  changeTab(next);
+                  document.getElementById(`tab-${next}`)?.focus();
+                }
+              }}
+            >
+              {t}
+              {t === 'Users' && (
+                <small>
+                  {tenant.users.filter((u) => u.status === 'active').length}
+                </small>
+              )}
+            </button>
+          ))}
       </div>
       <div
         className="tab-content"
@@ -535,6 +541,12 @@ export function TenantEditor({
                 </div>
               )}
             </>
+          )}
+          {tab === 'Static secrets' && (
+            <TenantStaticSecrets
+              environment={tenant.environment}
+              tenantId={tenant.id}
+            />
           )}
           {tab === 'Credentials' && (
             <>

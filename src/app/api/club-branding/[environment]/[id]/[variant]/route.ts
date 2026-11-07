@@ -1,3 +1,4 @@
+import { serverApiOrigin } from '@/lib/server-api-origin';
 import { resolveRealm } from '@/lib/server-realms';
 import { realmUnavailableResponse } from '@/lib/realm-unavailable';
 import { proxyRequest } from '@/lib/proxy';
@@ -38,7 +39,7 @@ export async function GET(
     read,
     segments,
     token,
-    process.env.EXPLORER_API_ORIGIN ?? '',
+    await serverApiOrigin().catch(() => ''),
   );
   if (!response.ok)
     return new Response(null, {

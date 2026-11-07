@@ -20,3 +20,7 @@ export async function serverSecrets() {
   }
   return environment;
 }
+
+export function tenantServerSecrets(tenantId: string) {
+  return holder.source.tenant(tenantId);
+}

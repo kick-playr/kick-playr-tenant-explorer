@@ -64,7 +64,8 @@ export async function realmForHost(
 ): Promise<ServerRealm> {
   if (
     env === process.env &&
-    env.SECRETS_KEYS_STRATEGY !== undefined &&
+    (env.VAULT_APPLICATION_ID !== undefined ||
+      env.SECRETS_KEYS_STRATEGY !== undefined) &&
     env.SECRETS_KEYS_STRATEGY !== 'ENV_VARIABLES'
   ) {
     try {
@@ -164,7 +165,14 @@ export async function realmForHost(
     !/^EXPLORER_CLUB_[A-Z0-9_]+_CLERK_SECRET_KEY$/.test(row.secretVariable)
   )
     throw new RealmConfigurationError('payload');
-  const secretKey = env[row.secretVariable];
+  const tenantId = row.secretVariable
+    .slice('EXPLORER_CLUB_'.length, -'_CLERK_SECRET_KEY'.length)
+    .toLowerCase()
+    .replaceAll('_', '-');
+  const secretKey = env.VAULT_APPLICATION_ID
+    ? (await import('./server-secrets')).tenantServerSecrets(tenantId)
+        .CLERK_SECRET_KEY
+    : env[row.secretVariable];
   if (!secretKey) throw new RealmConfigurationError('credentials');
   return { publishableKey: row.publishableKey, secretKey, club: true };
 }

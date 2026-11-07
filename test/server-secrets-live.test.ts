@@ -353,3 +353,7 @@ test('running Explorer adopts a new trusted realm and server credential without 
     assert.ok(JSON.stringify({ ...process.env }) === environmentBefore, 'process environment must be immutable');
   } finally { f.source.close(); }
 });
+
+test('explicit v2 bootstrap bypasses legacy discovery and serves local memory',async()=>{
+ let calls=0;const source=createLiveServerSecretsSource({VAULT_APPLICATION_ID:'explorer-app'},{bootstrapFactory:()=>({load:async()=>{calls++;return{CLERK_SECRET_KEY:'memory'}},refresh:async()=>{},status:()=>({state:'applied',ready:true}),tenant:()=>({CLERK_SECRET_KEY:'tenant-memory'}),close:()=>{}})});assert.equal((await source.load()).CLERK_SECRET_KEY,'memory');assert.equal(source.tenant('fcrww').CLERK_SECRET_KEY,'tenant-memory');assert.equal(calls,1);source.close();
+});

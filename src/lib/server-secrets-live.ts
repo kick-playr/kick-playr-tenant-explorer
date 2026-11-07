@@ -18,6 +18,13 @@ type RuntimeOptions = Parameters<
   typeof createApplicationRuntime<Environment>
 >[0];
 type Options = {
+  bootstrapFactory?: () => {
+    load(): Promise<Readonly<Record<string, string>>>;
+    refresh(): Promise<void>;
+    status(): { state: string; ready: boolean };
+    tenant?(id: string): Readonly<Record<string, string>>;
+    close(): void;
+  };
   legacyFactory?: () => SecretsRuntime | Promise<SecretsRuntime>;
   runtimeFactory?: (options: RuntimeOptions) => ApplicationRuntime<Environment>;
 };
@@ -26,6 +33,61 @@ export function createLiveServerSecretsSource(
   input: Record<string, string | undefined>,
   options: Options = {},
 ) {
+  if (input.VAULT_APPLICATION_ID) {
+    if (input.VAULT_APPLICATION_ID !== 'explorer-app') throw unavailable();
+    let source:
+        ReturnType<NonNullable<Options['bootstrapFactory']>> | undefined,
+      pending:
+        | Promise<ReturnType<NonNullable<Options['bootstrapFactory']>>>
+        | undefined;
+    const open = () =>
+      (pending ??= Promise.resolve().then(
+        async () =>
+          (source = options.bootstrapFactory
+            ? options.bootstrapFactory()
+            : (
+                await import('@kick-playr/local-key-vault/runtime-client/server-bootstrap')
+              ).createServerBootstrap(input, 'explorer-app', {
+                requiredMappings: [
+                  'CLERK_SECRET_KEY',
+                  'CLERK_ENCRYPTION_KEY',
+                  'CLERK_PUBLISHABLE_KEY',
+                ],
+              })),
+      ));
+    return {
+      load: async (): Promise<Environment> =>
+        (async () => {
+          const values = await (await open()).load();
+          return Object.freeze({
+            ...Object.fromEntries(
+              Object.entries(input).filter(([name]) =>
+                [
+                  'NODE_ENV',
+                  'NEXT_RUNTIME',
+                  'VAULT_APPLICATION_ID',
+                  'VAULT_ENVIRONMENT',
+                  'VAULT_URL',
+                ].includes(name),
+              ),
+            ),
+            SECRETS_KEYS_STRATEGY: 'LOCAL_KEYVAULT',
+            ...values,
+            NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: values.CLERK_PUBLISHABLE_KEY,
+          });
+        })(),
+      refresh: async () => {
+        await (await open()).refresh();
+      },
+      status: (): { state: string; reason?: string } =>
+        source?.status() ?? { state: 'starting' },
+      tenant: (id: string) => {
+        if (!source?.tenant) throw unavailable();
+        return source.tenant(id);
+      },
+      close: () => source?.close(),
+    };
+  }
   const environment = { ...input },
     strategy = environment.SECRETS_KEYS_STRATEGY ?? 'ENV_VARIABLES';
   let closed = false,
@@ -217,6 +279,9 @@ export function createLiveServerSecretsSource(
     return pending;
   }
   return {
+    tenant: (_id: string): Readonly<Record<string, string>> => {
+      throw unavailable();
+    },
     load: () => read(false),
     refresh: () => read(true),
     status: () =>

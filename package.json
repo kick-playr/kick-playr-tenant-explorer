@@ -18,7 +18,7 @@
   "dependencies": {
     "@clerk/nextjs": "^7.9.23",
     "@heroicons/react": "^2.2.0",
-    "@kick-playr/local-key-vault": "git+https://github.com/kick-playr/key-vault-api.git#e5f0c384193fd0049a5193b95b3061b5bfe206ea",
+    "@kick-playr/local-key-vault": "file:vendor/local-key-vault-runtime",
     "@tiptap/pm": "^3.32.2",
     "@tiptap/react": "^3.32.2",
     "@tiptap/starter-kit": "^3.32.2",

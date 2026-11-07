@@ -56,6 +56,7 @@ export default async function Page({
   )
     return (
       <ClubExplorer
+        staticVault={!!process.env.VAULT_APPLICATION_ID}
         clubs={access.items}
         account={
           <>
@@ -72,6 +73,7 @@ export default async function Page({
   if (access.role === 'platform-admin')
     return (
       <Explorer
+        staticVault={!!process.env.VAULT_APPLICATION_ID}
         account={
           <>
             {access.items?.length && (

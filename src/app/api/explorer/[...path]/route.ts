@@ -1,3 +1,4 @@
+import { serverApiOrigin } from '@/lib/server-api-origin';
 import { proxyRequest } from '@/lib/proxy';
 import { resolveRealm } from '@/lib/server-realms';
 import { realmUnavailableResponse } from '@/lib/realm-unavailable';
@@ -35,7 +36,7 @@ async function handle(
     request,
     path,
     token,
-    process.env.EXPLORER_API_ORIGIN ?? '',
+    await serverApiOrigin().catch(() => ''),
   );
 }
 export {
