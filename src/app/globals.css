@@ -2661,3 +2661,12 @@ input[type='checkbox'] {
     justify-self: start;
   }
 }
+.club-teams button {
+  min-width: 44px;
+  min-height: 44px;
+}
+.club-teams .team-toggle {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
