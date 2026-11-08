@@ -35,13 +35,17 @@ export async function proxyRequest(
             teamMatch[2]!,
           ))));
   if (teamMatch && !teamRoute) return fail(400, 'Invalid club team operation');
+  const teamMatrixMatch=/^clubs\/(development|test|preview|production)\/[a-z0-9][a-z0-9-]{0,63}\/chat\/team-rooms(\/[1-9][0-9]*(?:\/create)?)?$/.exec(path);
+  const teamMatrixRoute=!!teamMatrixMatch && ((!teamMatrixMatch[2]&&request.method==='GET') || (/^\/[1-9][0-9]*$/.test(teamMatrixMatch[2]??'')&&request.method==='PUT') || (/^\/[1-9][0-9]*\/create$/.test(teamMatrixMatch[2]??'')&&request.method==='POST'));
+  if(teamMatrixMatch&&!teamMatrixRoute)return fail(400,'Invalid team Matrix operation');
   const integrationTest = request.method === 'POST' &&
     /^clubs\/(development|test|preview|production)\/[a-z0-9][a-z0-9-]{0,63}\/integrations\/[a-z0-9][a-z0-9-]{0,63}\/(?:test-email|test-mailbox)$/.test(path);
   const club =
+    teamMatrixRoute ||
     integrationTest ||
     teamRoute ||
     callback ||
-    /^clubs(?:\/(development|test|preview|production)\/[a-z0-9][a-z0-9-]{0,63}\/(?:catalog\/(?:categories|branches)(?:\/flags\/[A-Za-z][A-Za-z0-9]{0,63})?|branding|settings|chat\/(?:status|spaces)|integrations(?:\/[a-z0-9][a-z0-9-]{0,63}(?:\/connect)?)?))?$/.test(
+    /^clubs(?:\/(development|test|preview|production)\/[a-z0-9][a-z0-9-]{0,63}\/(?:catalog\/(?:categories|branches)(?:\/flags\/[A-Za-z][A-Za-z0-9]{0,63})?|branding|settings|chat\/(?:status|spaces|rooms)|integrations(?:\/[a-z0-9][a-z0-9-]{0,63}(?:\/connect)?)?))?$/.test(
       path,
     );
   if (
@@ -57,6 +61,7 @@ export async function proxyRequest(
     return fail(400, 'Invalid explorer route');
   if (path.endsWith('/key-rotation') && request.method !== 'GET')
     return fail(400, 'Invalid explorer route');
+  if (/\/chat\/rooms$/.test(path) && request.method !== 'POST') return fail(400, 'Invalid chat room operation');
   const catalogFlag =
     /^clubs\/[^/]+\/[^/]+\/catalog\/(categories|branches)\/flags\/([^/]+)$/.exec(
       path,

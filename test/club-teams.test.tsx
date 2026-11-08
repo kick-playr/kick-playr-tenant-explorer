@@ -105,7 +105,7 @@ test('combined inventory excludes season state and season buttons save independe
     'false',
   );
 });
-test('same-name creation is explicit and retries keep the operation key after a lost response', async () => {
+test('team setup retries keep the operation key after a lost response', async () => {
   const writes: { operationKey: string; name: string; expectedHash: string }[] =
     [];
   const f = fixture(async (p, o) => {
@@ -127,9 +127,7 @@ test('same-name creation is explicit and retries keep the operation key after a 
     target: { value: 'Team A' },
   });
   fireEvent.click(screen.getByRole('button', { name: 'Review creation' }));
-  fireEvent.click(
-    screen.getByRole('button', { name: 'Create team and Bexio category' }),
-  );
+  fireEvent.click(screen.getByRole('button', { name: 'Link or create team' }));
   await screen.findByText(
     'Result not confirmed. Check creation status before starting another creation.',
   );
@@ -286,9 +284,7 @@ test('partial creation reloads current catalog before resuming local linking and
     target: { value: 'Team C' },
   });
   fireEvent.click(screen.getByRole('button', { name: 'Review creation' }));
-  fireEvent.click(
-    screen.getByRole('button', { name: 'Create team and Bexio category' }),
-  );
+  fireEvent.click(screen.getByRole('button', { name: 'Link or create team' }));
   await waitFor(() => assert.equal(!!screen.queryByRole('dialog'), false));
   fireEvent.click(
     screen.getByRole('button', { name: 'Check status for Team C' }),
@@ -357,3 +353,105 @@ for (const status of [409, 502])
     await waitFor(() => assert.equal(hashes.length, 2));
     assert.deepEqual(hashes, ['one', 'latest']);
   });
+
+test('missing category review validates the new name and displays the replacement ID', async () => {
+  const requests: unknown[] = [];
+  const f = fixture(async (p, o) => {
+    if (p.endsWith('/readiness'))
+      return {
+        checkedAt: '2026-11-09T00:00:00Z',
+        items: [{ id: 123, name: 'Team A', status: 'missing' }],
+      };
+    if (p.endsWith('/123/refresh')) {
+      requests.push(JSON.parse(String(o?.body)));
+      if (requests.length === 1) return { issue: 'name-missing' };
+      return {
+        catalog: {
+          ...original,
+          hash: 'two',
+          items: original.items.map((t) =>
+            t.id === 123 ? { ...t, id: 234, name: 'Da' } : t,
+          ),
+        },
+      };
+    }
+    if (p.endsWith('/chat/team-rooms'))
+      return { revision: 'v1', items: [], groups: [] };
+  });
+  render(
+    <ClubTeams
+      path={path}
+      request={f.request}
+      onBusyChange={() => {}}
+      onDirtyChange={() => {}}
+    />,
+  );
+  await screen.findByText('Linked category missing');
+  fireEvent.click(screen.getByRole('button', { name: 'Review Team A #123' }));
+  const dialog = screen.getByRole('dialog');
+  fireEvent.change(within(dialog).getByLabelText('New team name'), {
+    target: { value: 'Da' },
+  });
+  fireEvent.click(
+    within(dialog).getByRole('button', { name: 'Validate and relink' }),
+  );
+  await within(dialog).findByText(
+    'Bexio has no category with that exact name.',
+  );
+  assert.equal(
+    (within(dialog).getByLabelText('New team name') as HTMLInputElement).value,
+    'Da',
+  );
+  fireEvent.click(
+    within(dialog).getByRole('button', { name: 'Validate and relink' }),
+  );
+  await screen.findByRole('button', { name: 'Review Da #234' });
+  assert.deepEqual(requests, [
+    { expectedHash: 'one', name: 'Da' },
+    { expectedHash: 'one', name: 'Da' },
+  ]);
+});
+
+test('missing category Review deletes the team only after confirmation', async () => {
+  const requests: unknown[] = [];
+  const f = fixture(async (p, o) => {
+    if (p.endsWith('/readiness'))
+      return {
+        checkedAt: '2026-11-09T00:00:00Z',
+        items: [{ id: 123, name: 'Team A', status: 'missing' }],
+      };
+    if (p.endsWith('/123/refresh')) {
+      requests.push(JSON.parse(String(o?.body)));
+      return {
+        catalog: {
+          ...original,
+          hash: 'two',
+          items: original.items.map((team) =>
+            team.id === 123 ? { id: team.id, name: team.name } : team,
+          ),
+        },
+      };
+    }
+    if (p.endsWith('/chat/team-rooms'))
+      return { revision: 'v1', items: [], groups: [] };
+  });
+  render(
+    <ClubTeams
+      path={path}
+      request={f.request}
+      onBusyChange={() => {}}
+      onDirtyChange={() => {}}
+    />,
+  );
+  await screen.findByText('Linked category missing');
+  fireEvent.click(screen.getByRole('button', { name: 'Review Team A #123' }));
+  const dialog = within(screen.getByRole('dialog'));
+  fireEvent.click(dialog.getByRole('button', { name: 'Delete team' }));
+  assert.deepEqual(requests, []);
+  fireEvent.click(dialog.getByRole('button', { name: 'Confirm deletion' }));
+  await screen.findByText('Team deleted from the club catalogue.');
+  assert.ok(!screen.queryByRole('dialog'));
+  assert.ok(!screen.queryByRole('button', { name: 'Review Team A #123' }));
+  assert.ok(screen.getByRole('button', { name: 'Review Team A #456' }));
+  assert.deepEqual(requests, [{ expectedHash: 'one', action: 'delete' }]);
+});

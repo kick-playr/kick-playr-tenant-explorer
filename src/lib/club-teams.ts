@@ -3,6 +3,7 @@ export interface TeamItem {
   name: string;
   isTeam?: boolean;
   saison?: string[];
+  previousCategoryIds?: number[];
 }
 export interface TeamCatalog {
   id: 'catalog';

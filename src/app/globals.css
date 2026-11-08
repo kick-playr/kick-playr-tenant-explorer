@@ -2730,3 +2730,34 @@ input[type='checkbox'] {
   min-height: 44px;
   padding: 0.625rem;
 }
+
+.chat-hierarchy { margin-top: 1.25rem; }
+.chat-hierarchy ul { list-style: none; margin: 0; padding-left: 1.4rem; }
+.chat-hierarchy > ul { padding-left: 0; }
+.chat-hierarchy ul ul { border-left: 1px solid var(--border, #64748b); margin-left: .7rem; }
+.chat-tree-item { padding: .4rem 0; }
+.chat-tree-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .6rem; border-radius: .5rem; border: 1px solid var(--border, #64748b); }
+.chat-tree-row > div { min-width: 0; }
+.chat-kind, .chat-state { display: inline-block; font-size: .75rem; margin-right: .5rem; opacity: .8; }
+.chat-state { margin-left: .6rem; }
+.chat-kind { border: 1px solid currentColor; border-radius: .3rem; padding: .1rem .35rem; }
+.chat-alias { display: inline; margin-left: .65rem; overflow-wrap: anywhere; opacity: .75; }
+.chat-room-id { min-width: min(23rem, 45%); margin: 0; }
+.chat-room-id input { width: 100%; }
+.chat-deferred { padding: .8rem .5rem; opacity: .65; font-size: .85rem; }
+@media (max-width: 700px) { .chat-tree-row { align-items: stretch; flex-direction: column; } .chat-room-id { min-width: 0; } .chat-hierarchy ul { padding-left: .7rem; } }
+
+.team-card { grid-template-columns: minmax(5rem,.7fr) minmax(6rem,.9fr) minmax(5rem,.6fr) minmax(20rem,2fr) auto; }
+.team-matrix-column { min-width: 0; margin: 0; padding: .65rem; border: 1px solid var(--color-border, #64748b); border-radius: .5rem; }
+.team-matrix-column legend { font-weight: 600; font-size: .85rem; padding: 0 .3rem; }
+.team-matrix-column .field { margin-bottom: .4rem; gap: .2rem; }
+.team-matrix-column .field > span { font-size: .75rem; opacity: .8; }
+.team-matrix-column input { width: 100%; min-width: 0; font-size: .8rem; }
+.team-matrix-column .form-actions { flex-wrap: wrap; gap: .35rem; }
+.team-matrix-column .button { font-size: .75rem; padding: .4rem .6rem; }
+.team-matrix-column p, .team-matrix-conflict { font-size: .8rem; }
+.team-matrix-conflict input[type=checkbox] { width: auto; margin-right: .35rem; }
+@media (max-width: 1100px) { .team-card { grid-template-columns: 1fr 1fr; } .team-matrix-column { grid-column: 1 / -1; } }
+@media (max-width: 760px) { .team-card { grid-template-columns: 1fr; } }
+
+.team-matrix-room-name { font-weight: 600; overflow-wrap: anywhere; }

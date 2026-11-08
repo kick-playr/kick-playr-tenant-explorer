@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { displayChatName } from '../../lib/chat-display-name';
+import { ChatHierarchy, staticRoomFields } from './chat-hierarchy';
 import { apiRequest } from '../../lib/api';
 import type { IntegrationSectionProps } from './types';
 interface ChatConfig {
@@ -20,6 +20,8 @@ interface Space {
 interface Inventory {
   spaces: Space[];
   planned: { alias: string; name: string; suffix: string }[];
+  rooms?: Space[];
+  plannedRooms?: { key: string; alias: string; name: string; parent: string }[];
 }
 const empty: ChatConfig = {
   baseUrl: '',
@@ -30,12 +32,7 @@ const empty: ChatConfig = {
   search: 'names',
   blockWrites: false,
 };
-const roomFields = {
-  matrixAdminRoomId: 'Administrator room',
-  matrixBoardMembersRoomId: 'Board members room',
-  matrix1418CoachRoomId: '1418 coach room',
-  matrixTrainersRoomId: 'Trainers room',
-};
+const roomFields = staticRoomFields;
 export function ChatRoomsIntegrationSection(props: IntegrationSectionProps) {
   return <ChatRoomsEditor key={props.path} {...props} />;
 }
@@ -61,6 +58,10 @@ function ChatRoomsEditor({
   const [pending, setPending] = useState(false);
   const [dirty, setDirty] = useState(false);
   const disabled = busy || pending;
+  const connectionDirty =
+    !!settings &&
+    JSON.stringify(draft) !== JSON.stringify(settings.chat ?? empty);
+  const [readyRooms, setReadyRooms] = useState<Record<string, string>>({});
   useEffect(() => {
     if (!active || loaded.current) return;
     const abort = new AbortController();
@@ -155,17 +156,90 @@ function ChatRoomsEditor({
       setInventory((await request(path + '/chat/spaces')) as Inventory);
     });
   }
+  function updateRoom(key: string, id: string) {
+    setRooms((previous) => ({ ...previous, [key]: id }));
+    setDirty(true);
+    onDirtyChange('chat-rooms', true);
+    setMessage('');
+    setReadyRooms((previous) => {
+      const next = { ...previous };
+      delete next[key];
+      return next;
+    });
+  }
   async function create() {
     await work(async () => {
-      for (const suffix of ['', 'Trainers', 'Teams']) {
-        await request(path + '/chat/spaces', {
-          method: 'POST',
-          body: JSON.stringify({ suffix }),
-        });
-        setMessage(suffix ? suffix + ' space ready.' : 'Root space ready.');
+      try {
+        for (const suffix of ['', 'Trainers', 'Teams']) {
+          await request(path + '/chat/spaces', {
+            method: 'POST',
+            body: JSON.stringify({ suffix }),
+          });
+        }
+        for (const key of [
+          'matrixTrainersRoomId',
+          'matrix1418CoachRoomId',
+          'matrixBoardMembersRoomId',
+          'matrixAdminRoomId',
+        ]) {
+          const result = (await request(path + '/chat/rooms', {
+            method: 'POST',
+            body: JSON.stringify({ key, roomId: rooms[key] ?? '' }),
+          })) as { roomId: string; warning?: string };
+          if (!result.roomId)
+            throw Error(
+              'Room creation returned no ID; find and reconcile before retrying.',
+            );
+          if (result.roomId !== (rooms[key] ?? ''))
+            updateRoom(key, result.roomId);
+          if (result.warning) throw Error(result.warning);
+          setReadyRooms((previous) => ({ ...previous, [key]: result.roomId }));
+        }
+        setMessage(
+          'Spaces and static rooms are ready. Save to persist generated room IDs.',
+        );
+      } finally {
+        const next = (await request(path + '/chat/spaces').catch(
+          () => inventory,
+        )) as Inventory | null;
+        setInventory(next);
       }
+    });
+  }
+  async function reconcile(suffix: string) {
+    await work(async () => {
+      await request(path + '/chat/spaces', {
+        method: 'POST',
+        body: JSON.stringify({ suffix, reconcile: true }),
+      });
       setInventory((await request(path + '/chat/spaces')) as Inventory);
-      setMessage('Root, Trainers and Teams spaces are ready.');
+      setMessage((suffix || 'Root') + ' space reconciled and ready.');
+    });
+  }
+  async function reconcileRoom(key: string) {
+    await work(async () => {
+      try {
+        const result = (await request(path + '/chat/rooms', {
+          method: 'POST',
+          body: JSON.stringify({
+            key,
+            roomId: rooms[key] ?? '',
+            reconcile: true,
+          }),
+        })) as { roomId: string; warning?: string };
+        if (!result.roomId) throw Error('No reconciled room ID returned');
+        if (result.roomId !== (rooms[key] ?? ''))
+          updateRoom(key, result.roomId);
+        if (result.warning) throw Error(result.warning);
+        setReadyRooms((previous) => ({ ...previous, [key]: result.roomId }));
+        setMessage('Room reconciled. Save any generated room ID.');
+      } finally {
+        setInventory(
+          (await request(path + '/chat/spaces').catch(
+            () => inventory,
+          )) as Inventory | null,
+        );
+      }
     });
   }
   return (
@@ -181,7 +255,7 @@ function ChatRoomsEditor({
       {!settings ? (
         <p>Loading chat configuration…</p>
       ) : (
-        <form onSubmit={save}>
+        <form id="chat-configuration" onSubmit={save}>
           <fieldset disabled={disabled}>
             {(['baseUrl', 'serverName', 'discoveryOrigin'] as const).map(
               (key) => (
@@ -252,91 +326,60 @@ function ChatRoomsEditor({
                 }
               />
             </label>
-            {Object.entries(roomFields).map(([key, label]) => (
-              <label className="field" key={key}>
-                <span>{label}</span>
-                <input
-                  value={rooms[key] ?? ''}
-                  onChange={(e) => {
-                    setRooms({ ...rooms, [key]: e.target.value });
-                    setDirty(true);
-                    onDirtyChange('chat-rooms', true);
-                  }}
-                />
-              </label>
-            ))}
             <button type="submit" className="button primary" disabled={!dirty}>
               Save chat configuration
             </button>
           </fieldset>
         </form>
       )}
-      <h3>Tenant spaces</h3>
+      <h3>Spaces and rooms</h3>
       <p>
-        Spaces use the tenant and environment prefix. Creating spaces preserves
-        existing chat rooms and creates only missing root, Trainers and Teams
-        spaces. New spaces are private (invite-only) with encryption enabled.
-        Child chat rooms retain their own encryption settings.
+        Create the tenant spaces and four static rooms on demand. Existing room
+        IDs are reused. New rooms are private, invite-only and encrypted.
+        Generated IDs stay unsaved until you save chat configuration.
       </p>
       <div className="form-actions">
         <button
           type="button"
           className="button"
-          disabled={disabled || dirty || !configured || !settings?.chat}
+          disabled={
+            disabled || connectionDirty || !configured || !settings?.chat
+          }
           onClick={() => void discover()}
         >
-          Find spaces
+          Find spaces &amp; rooms
         </button>
         <button
           type="button"
           className="button primary"
           disabled={
             disabled ||
-            dirty ||
+            connectionDirty ||
             !configured ||
             !settings?.chat ||
             draft.blockWrites
           }
           onClick={() => void create()}
         >
-          Create all spaces
+          Create missing spaces &amp; rooms
         </button>
       </div>
-      {dirty && <p>Save configuration before managing spaces.</p>}
-      {inventory && (
-        <>
-          <ul>
-            {inventory.planned.map((p) => (
-              <li key={p.alias}>
-                {displayChatName(p.name)}: <code>{p.alias}</code> —{' '}
-                {inventory.spaces.some((s) => s.alias === p.alias)
-                  ? 'Found'
-                  : 'Missing'}
-              </li>
-            ))}
-          </ul>
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Alias</th>
-                <th>Room ID</th>
-              </tr>
-            </thead>
-            <tbody>
-              {inventory.spaces.map((s) => (
-                <tr key={s.roomId}>
-                  <td>{displayChatName(s.name)}</td>
-                  <td>{s.alias}</td>
-                  <td>{s.roomId}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {!inventory.spaces.length && (
-            <p>No spaces found for this tenant and environment.</p>
-          )}
-        </>
+      {connectionDirty && (
+        <p>Save configuration before managing spaces and rooms.</p>
+      )}
+      {settings && (
+        <ChatHierarchy
+          inventory={inventory}
+          rooms={rooms}
+          readyRooms={readyRooms}
+          disabled={disabled}
+          creationDisabled={
+            disabled || connectionDirty || !configured || draft.blockWrites
+          }
+          onRoomChange={updateRoom}
+          onReconcileRoom={(key) => void reconcileRoom(key)}
+          onReconcile={(suffix) => void reconcile(suffix)}
+        />
       )}
     </section>
   );

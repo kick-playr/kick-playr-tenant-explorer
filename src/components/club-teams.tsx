@@ -1,4 +1,5 @@
 'use client';
+import { TeamMatrixProvider, TeamMatrixRooms } from './team-matrix-rooms';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ApiError, type Transport } from '../lib/api';
 import {
@@ -47,7 +48,10 @@ export function ClubTeams({
   const [readiness, setReadiness] = useState<TeamReadiness>();
   const [readinessError, setReadinessError] = useState(false);
   const [checking, setChecking] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [ownBusy, setBusy] = useState(false);
+  const [matrixBusy, setMatrixBusy] = useState(false),
+    [matrixDirty, setMatrixDirty] = useState(false);
+  const busy = ownBusy || matrixBusy;
   const [reconcile, setReconcile] = useState(false);
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
@@ -55,6 +59,9 @@ export function ClubTeams({
   const [creation, setCreation] = useState<Creation>();
   const [creationError, setCreationError] = useState(false);
   const [reviewTeam, setReviewTeam] = useState<TeamItem>();
+  const [reviewName, setReviewName] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [matrixReload, setMatrixReload] = useState(0);
   const [search, setSearch] = useState('');
   const [reload, setReload] = useState(0);
   const lock = useRef(false),
@@ -67,8 +74,11 @@ export function ClubTeams({
   }, [onDirtyChange, onBusyChange]);
   const storageKey = 'club-team-create:' + path;
   useEffect(() => {
-    dirtyCallback.current(adding && !!name.trim());
-  }, [adding, name]);
+    const relinkDraft = !!reviewTeam && reviewName !== reviewTeam.name;
+    dirtyCallback.current(
+      (adding && !!name.trim()) || matrixDirty || relinkDraft,
+    );
+  }, [adding, name, matrixDirty, reviewTeam, reviewName]);
   const active = (scope = life.current) =>
     scope.active && scope === life.current;
   async function loadTeams() {
@@ -262,6 +272,7 @@ export function ClubTeams({
       setNotice(
         `${op.name} #${op.categoryId}: team and Bexio category confirmed.`,
       );
+      setMatrixReload((v) => v + 1);
       void checkReadiness();
     } else {
       setInventory((prev) =>
@@ -279,9 +290,10 @@ export function ClubTeams({
       );
       setCreationError(true);
       setNotice(
-        op.state === 'unknown'
-          ? 'Creation result is uncertain. Check status; no category will be created again for this operation.'
-          : 'Creation incomplete. Continue setup to confirm the existing operation.',
+        op.message ??
+          (op.state === 'unknown'
+            ? 'Creation result is uncertain. Check status before trying again.'
+            : 'Creation incomplete. Continue setup to confirm the existing operation.'),
       );
       // The server has durably recorded this operation. Move recovery to its
       // operation row and fetch the latest CAS hash before local-link retry.
@@ -337,20 +349,54 @@ export function ClubTeams({
       );
     });
   }
-  async function refreshName(team: TeamItem) {
+  async function reviewCategory(
+    team: TeamItem,
+    change?: { name: string } | { action: 'delete' },
+  ) {
+    const deleting = change && 'action' in change;
+    const relinking = change && 'name' in change;
     await mutation(async () => {
       try {
         const result = (await request(`${path}/teams/${team.id}/refresh`, {
           method: 'POST',
-          body: JSON.stringify({ expectedHash: inventory!.catalog.hash }),
-        })) as { catalog: unknown };
+          body: JSON.stringify({
+            expectedHash: inventory!.catalog.hash,
+            ...change,
+          }),
+        })) as { catalog: unknown; issue?: string };
+        if (result.issue) {
+          const issues: Record<string, string> = {
+            'name-missing': 'Bexio has no category with that exact name.',
+            'name-ambiguous':
+              'Bexio has multiple categories with that name. Resolve the duplicate names and try again.',
+            'category-valid':
+              'The recorded Bexio category is available again. Review its current name.',
+            'category-in-use':
+              'The matching Bexio category already belongs to another team or has saved team records.',
+          };
+          if (active()) {
+            setError(
+              new Error(
+                issues[result.issue] ??
+                  'The Bexio category could not be verified.',
+              ),
+            );
+            if (result.issue === 'category-valid') void checkReadiness();
+          }
+          return;
+        }
         const catalog = checkedTeamCatalog(result.catalog);
         if (active()) {
           setInventory((prev) => (prev ? { ...prev, catalog } : prev));
           setReviewTeam(undefined);
           setNotice(
-            'Name refreshed. Existing identity and memberships are unchanged.',
+            deleting
+              ? 'Team deleted from the club catalogue.'
+              : relinking
+                ? 'Team relinked to the matching Bexio category.'
+                : 'Team name refreshed from Bexio.',
           );
+          if (change) setMatrixReload((v) => v + 1);
           void checkReadiness();
         }
       } catch (e) {
@@ -359,13 +405,36 @@ export function ClubTeams({
         try {
           const latest = await loadTeams();
           if (!active()) return;
+          if (
+            deleting &&
+            latest.catalog.items.some((t) => t.id === team.id && !t.isTeam)
+          ) {
+            setReviewTeam(undefined);
+            setNotice('Team deleted from the club catalogue.');
+            setMatrixReload((v) => v + 1);
+            void checkReadiness();
+            return;
+          }
+          const relinked = relinking
+            ? latest.catalog.items.find(
+                (item) =>
+                  item.isTeam && item.previousCategoryIds?.includes(team.id),
+              )
+            : undefined;
+          if (relinked) {
+            setReviewTeam(undefined);
+            setNotice(`Team is linked to ${relinked.name} #${relinked.id}.`);
+            setMatrixReload((v) => v + 1);
+            void checkReadiness();
+            return;
+          }
           setReviewTeam(
             latest.catalog.items.find((t) => t.id === team.id && t.isTeam),
           );
           setNotice(
             e instanceof ApiError && e.status === 409
               ? 'Changed elsewhere. Review the latest category and confirm again.'
-              : 'Refresh result was not confirmed. The latest saved configuration has been reloaded.',
+              : 'The result was not confirmed. The latest saved configuration has been reloaded.',
           );
         } catch {
           if (active()) {
@@ -384,6 +453,9 @@ export function ClubTeams({
     .sort((a, b) => a.name.localeCompare(b.name) || a.id - b.id);
   const visible = teams.filter((t) =>
     (t.name + ' ' + t.id).toLowerCase().includes(search.toLowerCase()),
+  );
+  const reviewStatus = readiness?.items.find(
+    (item) => item.id === reviewTeam?.id,
   );
   const seasons = [
     { label: 'Current', season: settings?.currentSaison },
@@ -454,43 +526,61 @@ export function ClubTeams({
         {inventory && teams.length > 0 && visible.length === 0 && (
           <p>No teams match this search.</p>
         )}
-        <div className="team-inventory">
-          {visible.map((team) => {
-            const ready = readiness?.items.find((r) => r.id === team.id);
-            return (
-              <article
-                key={team.id}
-                className="team-card"
-                data-readiness={ready?.status}
-              >
-                <h3>{team.name}</h3>
-                <div>
-                  <span className="field-hint">Bexio category</span>
-                  <p>
-                    {ready?.upstreamName ?? team.name} · #{team.id}
-                  </p>
-                </div>
-                <p className="team-readiness">
-                  {ready
-                    ? messages[ready.status]
-                    : checking
-                      ? 'Checking…'
-                      : readinessError
-                        ? 'Check unavailable'
-                        : 'Not checked'}
-                </p>
-                <button
-                  className="button secondary"
-                  disabled={busy}
-                  onClick={() => setReviewTeam(team)}
-                  aria-label={`Review ${team.name} #${team.id}`}
+        <TeamMatrixProvider
+          key={path}
+          path={path}
+          request={request}
+          externalBusy={ownBusy}
+          reloadSignal={matrixReload}
+          onDirtyChange={setMatrixDirty}
+          onBusyChange={(value) => {
+            setMatrixBusy(value);
+            busyCallback.current(value);
+          }}
+        >
+          <div className="team-inventory">
+            {visible.map((team) => {
+              const ready = readiness?.items.find((r) => r.id === team.id);
+              return (
+                <article
+                  key={team.id}
+                  className="team-card"
+                  data-readiness={ready?.status}
                 >
-                  Review
-                </button>
-              </article>
-            );
-          })}
-        </div>
+                  <h3>{team.name}</h3>
+                  <div>
+                    <span className="field-hint">Bexio category</span>
+                    <p>
+                      {ready?.upstreamName ?? team.name} · #{team.id}
+                    </p>
+                  </div>
+                  <p className="team-readiness">
+                    {ready
+                      ? messages[ready.status]
+                      : checking
+                        ? 'Checking…'
+                        : readinessError
+                          ? 'Check unavailable'
+                          : 'Not checked'}
+                  </p>
+                  <TeamMatrixRooms team={team} />
+                  <button
+                    className="button secondary"
+                    disabled={busy}
+                    onClick={() => {
+                      setReviewName(team.name);
+                      setConfirmDelete(false);
+                      setReviewTeam(team);
+                    }}
+                    aria-label={`Review ${team.name} #${team.id}`}
+                  >
+                    Review
+                  </button>
+                </article>
+              );
+            })}
+          </div>
+        </TeamMatrixProvider>
         {(inventory?.operations.length ?? 0) > 0 && (
           <section aria-label="Incomplete team creation">
             <h3>Incomplete team creation</h3>
@@ -586,8 +676,8 @@ export function ClubTeams({
         >
           {error != null && <ErrorText error={error} />}
           <p className="modal-intro">
-            Creates a club team and its linked Bexio category. The team starts
-            without a season.
+            Links a matching Bexio category or creates one if needed. New teams
+            start without a season.
           </p>
           <p className="field-hint">
             Club / environment: {path.split('/').slice(1).reverse().join(' / ')}
@@ -596,10 +686,6 @@ export function ClubTeams({
             <>
               <p>
                 Team name: <strong>{name.trim()}</strong>
-              </p>
-              <p>
-                Same-name categories are separate identities. Existing records
-                will stay unchanged.
               </p>
             </>
           ) : (
@@ -641,7 +727,7 @@ export function ClubTeams({
                   disabled={busy}
                   onClick={() => void create()}
                 >
-                  Create team and Bexio category
+                  Link or create team
                 </button>
               </>
             ) : (
@@ -666,27 +752,93 @@ export function ClubTeams({
           <p>
             Recorded category: {reviewTeam.name} · #{reviewTeam.id}
           </p>
-          <p>
-            Bexio:{' '}
-            {readiness?.items.find((t) => t.id === reviewTeam.id)
-              ?.upstreamName ?? 'Verification unavailable'}{' '}
-            · #{reviewTeam.id}
-          </p>
-          <Notice>
-            Existing category IDs stay fixed. Replacing an identity is
-            unavailable in this release.
-          </Notice>
-          <p>
-            Refresh the name from the same Bexio ID. Season memberships and
-            linked records stay unchanged.
-          </p>
-          <button
-            className="button primary"
-            disabled={busy || reconcile}
-            onClick={() => void refreshName(reviewTeam)}
-          >
-            Confirm name refresh
-          </button>
+          {reviewStatus?.status === 'missing' && confirmDelete ? (
+            <>
+              <p>
+                Delete {reviewTeam.name} from the club catalogue and remove its
+                season selections? Saved season records and Matrix mappings
+                will be kept.
+              </p>
+              <div className="actions">
+                <button
+                  type="button"
+                  className="button secondary"
+                  disabled={busy}
+                  onClick={() => setConfirmDelete(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="button danger"
+                  disabled={busy || checking || reconcile || matrixDirty}
+                  onClick={() =>
+                    void reviewCategory(reviewTeam, { action: 'delete' })
+                  }
+                >
+                  Confirm deletion
+                </button>
+              </div>
+            </>
+          ) : reviewStatus?.status === 'missing' ? (
+            <>
+              <p>
+                Bexio could not find category #{reviewTeam.id}. Relink the team
+                to a replacement category or delete it from the club catalogue.
+              </p>
+              <Field label="New team name">
+                <input
+                  value={reviewName}
+                  onChange={(event) => setReviewName(event.target.value)}
+                  maxLength={256}
+                  disabled={busy}
+                />
+              </Field>
+              {matrixDirty && (
+                <Notice>
+                  Save your Matrix drafts before relinking or deleting the team.
+                </Notice>
+              )}
+              <div className="actions">
+                <button
+                  type="button"
+                  className="button primary"
+                  disabled={
+                    busy || reconcile || matrixDirty || !reviewName.trim()
+                  }
+                  onClick={() =>
+                    void reviewCategory(reviewTeam, { name: reviewName.trim() })
+                  }
+                >
+                  Validate and relink
+                </button>
+                <button
+                  type="button"
+                  className="button danger"
+                  disabled={busy || checking || reconcile || matrixDirty}
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  Delete team
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p>
+                Bexio category{' '}
+                {reviewStatus?.upstreamName ?? 'verification unavailable'} · #
+                {reviewTeam.id}
+              </p>
+              <button
+                type="button"
+                className="button primary"
+                disabled={busy || reconcile}
+                onClick={() => void reviewCategory(reviewTeam)}
+              >
+                Confirm name refresh
+              </button>
+            </>
+          )}
         </Dialog>
       )}
     </div>
