@@ -11,7 +11,12 @@ export const dynamic = 'force-dynamic';
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: string }>;
+  searchParams: Promise<{
+    view?: string;
+    section?: string;
+    club?: string;
+    environment?: string;
+  }>;
 }) {
   const result = await serverComponentRealm(
     (await headers()).get('host') ?? '',
@@ -50,14 +55,39 @@ export default async function Page({
         </div>
       </main>
     );
+  const query = await searchParams;
+  const teamClub =
+    query.section === 'teams'
+      ? access.items?.find(
+          (c) => c.id === query.club && c.environment === query.environment,
+        )
+      : undefined;
+  if (query.section === 'teams' && !teamClub)
+    return (
+      <main className="setup-page">
+        <div className="setup-card">
+          <h1>Club access unavailable</h1>
+          <p>
+            The requested club or environment is not available to this account.
+          </p>
+          <Link href="/?view=club">My clubs</Link>
+        </div>
+      </main>
+    );
   if (
-    (access.role === 'club-admin' || (await searchParams).view === 'club') &&
+    (access.role === 'club-admin' || query.view === 'club') &&
     access.items?.length
   )
     return (
       <ClubExplorer
         staticVault={!!process.env.VAULT_APPLICATION_ID}
         clubs={access.items}
+        initialSection={teamClub ? 'teams' : undefined}
+        initialClub={
+          teamClub
+            ? { id: teamClub.id, environment: teamClub.environment }
+            : undefined
+        }
         account={
           <>
             {access.role === 'platform-admin' && (

@@ -2584,3 +2584,89 @@ input[type='checkbox'] {
   height: 16px;
   background: url('/bexio-favicon.ico') center / contain no-repeat;
 }
+
+/* Club team inventory and season membership share the administration theme. */
+.club-teams {
+  display: grid;
+  gap: 2rem;
+}
+.club-teams section {
+  min-width: 0;
+}
+.team-toolbar {
+  display: flex;
+  gap: 1rem;
+  align-items: end;
+  justify-content: space-between;
+  margin-block: 1rem;
+  flex-wrap: wrap;
+}
+.team-toolbar .field {
+  flex: 1;
+  max-width: 28rem;
+}
+.team-inventory {
+  display: grid;
+  gap: 0.75rem;
+}
+.team-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  border: 1px solid var(--color-border, #64748b);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  overflow-wrap: anywhere;
+}
+.team-card h3 {
+  margin: 0;
+}
+.team-card p {
+  margin: 0.25rem 0;
+}
+.team-season {
+  border: 0;
+  padding: 0.75rem 0;
+  min-width: 0;
+}
+.team-season legend {
+  font-weight: 700;
+}
+.team-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.team-toggle {
+  min-height: 44px;
+}
+.team-toggle[aria-pressed='true'] {
+  box-shadow: inset 0 0 0 2px currentColor;
+  font-weight: 700;
+}
+.team-operation {
+  padding: 1rem;
+  border: 1px solid var(--color-border, #64748b);
+  border-radius: 0.75rem;
+  margin-block: 0.5rem;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 760px) {
+  .team-card {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+  .team-card .button {
+    justify-self: start;
+  }
+}
+.club-teams button {
+  min-width: 44px;
+  min-height: 44px;
+}
+.club-teams .team-toggle {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

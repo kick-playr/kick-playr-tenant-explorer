@@ -14,8 +14,30 @@ export async function proxyRequest(
     );
   if (!token) return fail(401, 'Sign in to the tenant explorer');
   const path = segments.join('/');
-  const callback = /^clubs\/(development|test|preview|production)\/[a-z0-9][a-z0-9-]{0,63}\/integrations\/(bexio|dropbox)\/callback$/.test(path);
-  const club = callback ||
+  const callback =
+    /^clubs\/(development|test|preview|production)\/[a-z0-9][a-z0-9-]{0,63}\/integrations\/(bexio|dropbox)\/callback$/.test(
+      path,
+    );
+  const teamMatch =
+    /^clubs\/(development|test|preview|production)\/[a-z0-9][a-z0-9-]{0,63}\/(teams(?:\/.*)?|catalog\/categories\/team-seasons)$/.exec(
+      path,
+    );
+  const teamRoute =
+    !!teamMatch &&
+    ((request.method === 'GET' &&
+      /^teams(?:\/readiness)?$/.test(teamMatch[2]!)) ||
+      (request.method === 'PUT' &&
+        teamMatch[2] === 'catalog/categories/team-seasons') ||
+      (request.method === 'POST' &&
+        (teamMatch[2] === 'teams/create' ||
+          /^teams\/[1-9][0-9]*\/refresh$/.test(teamMatch[2]!) ||
+          /^teams\/operations\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/resume$/i.test(
+            teamMatch[2]!,
+          ))));
+  if (teamMatch && !teamRoute) return fail(400, 'Invalid club team operation');
+  const club =
+    teamRoute ||
+    callback ||
     /^clubs(?:\/(development|test|preview|production)\/[a-z0-9][a-z0-9-]{0,63}\/(?:catalog\/(?:categories|branches)(?:\/flags\/[A-Za-z][A-Za-z0-9]{0,63})?|branding|settings|integrations(?:\/[a-z0-9][a-z0-9-]{0,63}(?:\/connect)?)?))?$/.test(
       path,
     );
@@ -63,7 +85,8 @@ export async function proxyRequest(
     return fail(503, 'Configure EXPLORER_API_ORIGIN on the explorer server');
   }
   const incoming = new URL(request.url);
-  if (callback && request.method !== 'GET') return fail(405,'OAuth callbacks require GET');
+  if (callback && request.method !== 'GET')
+    return fail(405, 'OAuth callbacks require GET');
   const mutation = !['GET', 'HEAD'].includes(request.method);
   if (mutation) {
     // Next can use its internal listener address in request.url. The browser's

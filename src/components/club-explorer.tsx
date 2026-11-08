@@ -1,4 +1,5 @@
 'use client';
+import { ClubTeams } from './club-teams';
 import { TenantStaticSecrets } from './tenant-static-secrets';
 import Link from 'next/link';
 import { ClubBrandingProvider } from './club-branding-provider';
@@ -24,13 +25,22 @@ export function ClubExplorer({
   staticVault = false,
   account,
   request = apiRequest,
+  initialSection,
+  initialClub,
 }: {
   clubs: ClubSummary[];
+  initialSection?: 'teams';
+  initialClub?: { id: string; environment: string };
   staticVault?: boolean;
   account?: ReactNode;
   request?: Transport;
 }) {
-  const [selected, setSelected] = useState(clubs[0]!);
+  const [selected, setSelected] = useState(
+    clubs.find(
+      (c) =>
+        c.id === initialClub?.id && c.environment === initialClub?.environment,
+    ) ?? clubs[0]!,
+  );
   const connectionDrafts = useRef(new Set<string>());
   function connectionDirty(id: string, dirty: boolean) {
     if (dirty) setSaved(false);
@@ -39,8 +49,8 @@ export function ClubExplorer({
     setDirty(connectionDrafts.current.size > 0);
   }
   const [tab, setTab] = useState<
-    'settings' | 'integrations' | 'static-secrets'
-  >('settings');
+    'settings' | 'teams' | 'integrations' | 'static-secrets'
+  >(initialSection ?? 'settings');
   const [settingsSection, setSettingsSection] = useState('seasons');
   const [integrationSection, setIntegrationSection] = useState('');
   const [settings, setSettings] = useState<ClubSettingsSnapshot | null>(null);
@@ -56,7 +66,7 @@ export function ClubExplorer({
   } | null>(null);
   const path = `clubs/${encodeURIComponent(selected.environment)}/${encodeURIComponent(selected.id)}`;
   useEffect(() => {
-    if (tab === 'static-secrets') return;
+    if (tab === 'static-secrets' || tab === 'teams') return;
     const abort = new AbortController();
     request(`${path}/${tab}`, { signal: abort.signal })
       .then((value) => {
@@ -165,7 +175,11 @@ export function ClubExplorer({
               <div className="breadcrumb">
                 My club <span>/</span>
                 <strong>
-                  {tab === 'settings' ? 'Settings' : 'Integrations'}
+                  {tab === 'settings'
+                    ? 'Settings'
+                    : tab === 'teams'
+                      ? 'Teams'
+                      : 'Integrations'}
                 </strong>
               </div>
             </div>
@@ -212,6 +226,7 @@ export function ClubExplorer({
                 {(
                   [
                     'settings',
+                    'teams',
                     'integrations',
                     ...(staticVault ? ['static-secrets' as const] : []),
                   ] as const
@@ -231,9 +246,11 @@ export function ClubExplorer({
                   >
                     {t === 'settings'
                       ? 'Settings'
-                      : t === 'static-secrets'
-                        ? 'Static secrets'
-                        : 'Integrations'}
+                      : t === 'teams'
+                        ? 'Teams'
+                        : t === 'static-secrets'
+                          ? 'Static secrets'
+                          : 'Integrations'}
                   </button>
                 ))}
               </div>
@@ -252,6 +269,15 @@ export function ClubExplorer({
                   </Notice>
                 )}
                 {saved && <p role="status">Saved.</p>}
+                {tab === 'teams' && (
+                  <ClubTeams
+                    key={path}
+                    path={path}
+                    request={request}
+                    onBusyChange={setBusy}
+                    onDirtyChange={setDirty}
+                  />
+                )}
                 {tab === 'static-secrets' && (
                   <TenantStaticSecrets
                     environment={selected.environment}
