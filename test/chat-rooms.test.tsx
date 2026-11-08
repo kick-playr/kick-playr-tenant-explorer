@@ -1,3 +1,4 @@
+import { displayChatName } from '../src/lib/chat-display-name.ts';
 import './dom.ts';
 import React from 'react';
 import { test, afterEach } from 'node:test';
@@ -17,7 +18,7 @@ test('Chat rooms is always in Integrations and no longer in Settings', () => {
   assert(integrationSections([]).some((s) => s.label === 'Chat rooms'));
   assert(!SETTINGS_SECTIONS.some((s) => s.label === 'Chat rooms'));
 });
-test('loads tenant spaces and creates root, Trainer and Teams only after clicking', async () => {
+test('loads tenant spaces and creates root, Trainers and Teams only after clicking', async () => {
   const writes: unknown[] = [];
   const config = {
     baseUrl: 'https://matrix.example.org',
@@ -31,8 +32,8 @@ test('loads tenant spaces and creates root, Trainer and Teams only after clickin
   const inventory = {
     planned: [
       {
-        name: 'Club',
-        alias: '#kick_development_fcrww:example.org',
+        name: 'development_fcrww',
+        alias: '#kick_development_fcrww_club:example.org',
         suffix: '',
       },
     ],
@@ -65,11 +66,11 @@ test('loads tenant spaces and creates root, Trainer and Teams only after clickin
   await waitFor(() =>
     assert.deepEqual(writes, [
       { suffix: '' },
-      { suffix: 'Trainer' },
+      { suffix: 'Trainers' },
       { suffix: 'Teams' },
     ]),
   );
-  await screen.findByText('Root, Trainer and Teams spaces are ready.');
+  await screen.findByText('Root, Trainers and Teams spaces are ready.');
 });
 test('switching integration subtabs preserves the unsaved chat draft', async () => {
   const config = {
@@ -109,4 +110,20 @@ test('switching integration subtabs preserves the unsaved chat draft', async () 
     (screen.getByLabelText('Matrix API URL') as HTMLInputElement).value,
     'https://edited.example.org',
   );
+});
+
+test('space labels omit all stage prefixes, including production, without changing identifiers', () => {
+  for (const stage of [
+    'local',
+    'development',
+    'preview',
+    'test',
+    'staging',
+    'production',
+  ]) {
+    assert.equal(displayChatName(stage + '_fcrww'), 'fcrww');
+    assert.equal(displayChatName(stage + '_Trainers'), 'Trainers');
+  }
+  assert.equal(displayChatName('production_preview_Teams'), 'Teams');
+  assert.equal(displayChatName('Teams_preview_U13'), 'Teams_preview_U13');
 });

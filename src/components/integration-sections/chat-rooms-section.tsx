@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { displayChatName } from '../../lib/chat-display-name';
 import { apiRequest } from '../../lib/api';
 import type { IntegrationSectionProps } from './types';
 interface ChatConfig {
@@ -156,7 +157,7 @@ function ChatRoomsEditor({
   }
   async function create() {
     await work(async () => {
-      for (const suffix of ['', 'Trainer', 'Teams']) {
+      for (const suffix of ['', 'Trainers', 'Teams']) {
         await request(path + '/chat/spaces', {
           method: 'POST',
           body: JSON.stringify({ suffix }),
@@ -164,7 +165,7 @@ function ChatRoomsEditor({
         setMessage(suffix ? suffix + ' space ready.' : 'Root space ready.');
       }
       setInventory((await request(path + '/chat/spaces')) as Inventory);
-      setMessage('Root, Trainer and Teams spaces are ready.');
+      setMessage('Root, Trainers and Teams spaces are ready.');
     });
   }
   return (
@@ -273,8 +274,9 @@ function ChatRoomsEditor({
       <h3>Tenant spaces</h3>
       <p>
         Spaces use the tenant and environment prefix. Creating spaces preserves
-        existing chat rooms and creates only missing root, Trainer and Teams
-        spaces.
+        existing chat rooms and creates only missing root, Trainers and Teams
+        spaces. New spaces are private (invite-only) with encryption enabled.
+        Child chat rooms retain their own encryption settings.
       </p>
       <div className="form-actions">
         <button
@@ -306,7 +308,7 @@ function ChatRoomsEditor({
           <ul>
             {inventory.planned.map((p) => (
               <li key={p.alias}>
-                {p.name}: <code>{p.alias}</code> —{' '}
+                {displayChatName(p.name)}: <code>{p.alias}</code> —{' '}
                 {inventory.spaces.some((s) => s.alias === p.alias)
                   ? 'Found'
                   : 'Missing'}
@@ -324,7 +326,7 @@ function ChatRoomsEditor({
             <tbody>
               {inventory.spaces.map((s) => (
                 <tr key={s.roomId}>
-                  <td>{s.name}</td>
+                  <td>{displayChatName(s.name)}</td>
                   <td>{s.alias}</td>
                   <td>{s.roomId}</td>
                 </tr>
