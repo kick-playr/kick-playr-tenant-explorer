@@ -325,3 +325,25 @@ test('Bexio mappings remain reachable before an OAuth connection is configured',
     null,
   );
 });
+
+test('Teams tab combines inventory and readiness and opens the season editor without rendering integration settings', async () => {
+  const request: Transport = async (path) =>
+    path.endsWith('/teams')
+      ? {
+          catalog: {
+            id: 'catalog',
+            hash: 'one',
+            items: [{ id: 123, name: 'A', isTeam: true, saison: ['26.1'] }],
+          },
+          operations: [],
+        }
+      : path.endsWith('/readiness')
+        ? { checkedAt: '2026-11-08T12:00:00Z', items: [] }
+        : settings;
+  render(<ClubExplorer clubs={clubs} request={request} />);
+  await screen.findByLabelText('Current season');
+  fireEvent.click(screen.getByRole('button', { name: 'Teams' }));
+  await screen.findByRole('button', { name: 'A #123 · Current 26.1' });
+  assert.ok(screen.getByRole('region', { name: 'All teams' }));
+  assert.equal(screen.queryByLabelText('Current season'), null);
+});

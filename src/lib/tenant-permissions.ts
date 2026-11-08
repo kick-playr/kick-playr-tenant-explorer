@@ -3,6 +3,7 @@ export const tenantAdministratorPermissions = [
   'club:settings:read',
   'club:settings:write',
   'club:catalog:read',
+  'club:catalog:write',
   'club:contacts:read',
   'club:teams:read',
   'club:integrations:read',
