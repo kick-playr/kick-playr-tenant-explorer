@@ -339,18 +339,43 @@ export function ClubTeams({
   }
   async function refreshName(team: TeamItem) {
     await mutation(async () => {
-      const result = (await request(`${path}/teams/${team.id}/refresh`, {
-        method: 'POST',
-        body: JSON.stringify({ expectedHash: inventory!.catalog.hash }),
-      })) as { catalog: unknown };
-      const catalog = checkedTeamCatalog(result.catalog);
-      if (active()) {
-        setInventory((prev) => (prev ? { ...prev, catalog } : prev));
-        setReviewTeam(undefined);
-        setNotice(
-          'Name refreshed. Existing identity and memberships are unchanged.',
-        );
-        void checkReadiness();
+      try {
+        const result = (await request(`${path}/teams/${team.id}/refresh`, {
+          method: 'POST',
+          body: JSON.stringify({ expectedHash: inventory!.catalog.hash }),
+        })) as { catalog: unknown };
+        const catalog = checkedTeamCatalog(result.catalog);
+        if (active()) {
+          setInventory((prev) => (prev ? { ...prev, catalog } : prev));
+          setReviewTeam(undefined);
+          setNotice(
+            'Name refreshed. Existing identity and memberships are unchanged.',
+          );
+          void checkReadiness();
+        }
+      } catch (e) {
+        if (!active()) return;
+        setReconcile(true);
+        try {
+          const latest = await loadTeams();
+          if (!active()) return;
+          setReviewTeam(
+            latest.catalog.items.find((t) => t.id === team.id && t.isTeam),
+          );
+          setNotice(
+            e instanceof ApiError && e.status === 409
+              ? 'Changed elsewhere. Review the latest category and confirm again.'
+              : 'Refresh result was not confirmed. The latest saved configuration has been reloaded.',
+          );
+        } catch {
+          if (active()) {
+            setReconcile(true);
+            setNotice(
+              'Result not confirmed. Close this review and reload teams before making another change.',
+            );
+          }
+        }
+        throw e;
       }
     });
   }
@@ -369,7 +394,7 @@ export function ClubTeams({
   ];
   return (
     <div className="club-teams">
-      {error != null && <ErrorText error={error} />}
+      {error != null && !reviewTeam && !adding && <ErrorText error={error} />}
       {notice && <Notice>{notice}</Notice>}
       {(!inventory || reconcile) && (
         <button
@@ -557,6 +582,7 @@ export function ClubTeams({
             setReview(false);
           }}
         >
+          {error != null && <ErrorText error={error} />}
           <p className="modal-intro">
             Creates a club team and its linked Bexio category. The team starts
             without a season.
@@ -634,6 +660,7 @@ export function ClubTeams({
           busy={busy}
           onClose={() => setReviewTeam(undefined)}
         >
+          {error != null && <ErrorText error={error} />}
           <p>
             Recorded category: {reviewTeam.name} · #{reviewTeam.id}
           </p>

@@ -300,3 +300,60 @@ test('partial creation reloads current catalog before resuming local linking and
     false,
   );
 });
+
+for (const status of [409, 502])
+  test(`same-ID name refresh reconciles status ${status} so its next confirmation uses the new hash`, async () => {
+    const hashes: string[] = [];
+    let conflicted = false;
+    const f = fixture(async (p, o) => {
+      if (p.endsWith('/123/refresh')) {
+        const body = JSON.parse(String(o?.body));
+        hashes.push(body.expectedHash);
+        if (hashes.length === 1) {
+          conflicted = true;
+          throw new ApiError(
+            status,
+            status === 409 ? 'Changed elsewhere' : 'Response lost',
+          );
+        }
+        return { catalog: { ...original, hash: 'saved' } };
+      }
+      if (p.endsWith('/teams'))
+        return {
+          catalog: { ...original, hash: conflicted ? 'latest' : 'one' },
+          operations: [],
+        };
+    });
+    render(
+      <ClubTeams
+        path={path}
+        request={f.request}
+        onBusyChange={() => {}}
+        onDirtyChange={() => {}}
+      />,
+    );
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Review Team A #123' }),
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Confirm name refresh' }),
+    );
+    await screen.findByText(
+      status === 409 ? 'Changed elsewhere' : 'Response lost',
+    );
+    await waitFor(() =>
+      assert.equal(
+        (
+          screen.getByRole('button', {
+            name: 'Confirm name refresh',
+          }) as HTMLButtonElement
+        ).disabled,
+        false,
+      ),
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Confirm name refresh' }),
+    );
+    await waitFor(() => assert.equal(hashes.length, 2));
+    assert.deepEqual(hashes, ['one', 'latest']);
+  });
