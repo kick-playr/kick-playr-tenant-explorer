@@ -458,17 +458,19 @@ export function ClubTeams({
           {visible.map((team) => {
             const ready = readiness?.items.find((r) => r.id === team.id);
             return (
-              <article key={team.id} className="team-card">
-                <h3>
-                  {team.name} <span className="field-hint">#{team.id}</span>
-                </h3>
+              <article
+                key={team.id}
+                className="team-card"
+                data-readiness={ready?.status}
+              >
+                <h3>{team.name}</h3>
                 <div>
                   <span className="field-hint">Bexio category</span>
                   <p>
                     {ready?.upstreamName ?? team.name} · #{team.id}
                   </p>
                 </div>
-                <p>
+                <p className="team-readiness">
                   {ready
                     ? messages[ready.status]
                     : checking

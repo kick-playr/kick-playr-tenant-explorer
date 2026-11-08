@@ -211,7 +211,7 @@ test('mail settings show safe configuration and create SMTP with a null revision
   const user = await screen.findByLabelText('Username');
   assert.equal(
     (screen.getByLabelText('Sender address') as HTMLInputElement).readOnly,
-    true,
+    false,
   );
   fireEvent.change(user, { target: { value: 'club-user' } });
   const password = screen.getByLabelText('New password') as HTMLInputElement;
@@ -225,6 +225,7 @@ test('mail settings show safe configuration and create SMTP with a null revision
       port: 587,
       user: 'club-user',
       password: 'NEW_MAIL_PASSWORD',
+      fromAddress: 'club@example.org',
     },
   });
   await waitFor(() => assert.equal(password.value, ''));

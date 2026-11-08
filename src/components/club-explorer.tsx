@@ -1,4 +1,5 @@
 'use client';
+import { confirmTenantSmtpSave } from '../lib/tenant-smtp-save';
 import { ClubTeams } from './club-teams';
 import { TenantStaticSecrets } from './tenant-static-secrets';
 import Link from 'next/link';
@@ -226,8 +227,8 @@ export function ClubExplorer({
                 {(
                   [
                     'settings',
-                    'teams',
                     'integrations',
+                    'teams',
                     ...(staticVault ? ['static-secrets' as const] : []),
                   ] as const
                 ).map((t) => (
@@ -345,6 +346,57 @@ export function ClubExplorer({
                           if (result) setRefresh((n) => n + 1);
                         }}
                         onSave={async (c, secret) => {
+                          if ((c.provider === 'smtp' || c.provider === 'imap') && c.mail?.vault) {
+                            setBusy(true);
+                            setError(undefined);
+                            setSaved(false);
+                            try {
+                              const scope = new URLSearchParams({
+                                environment: selected.environment,
+                                ownerType: 'tenant',
+                                ownerId: selected.id,
+                              });
+                              await confirmTenantSmtpSave({
+                                path,
+                                connection: c,
+                                settings: secret,
+                                request,
+                                publish: async () => {
+                                  const response = await fetch(
+                                    `/api/vault-v2/tenant-${c.provider}/${encodeURIComponent(c.mail!.vault!.resourceId)}?${scope}`,
+                                    {
+                                      method: 'PUT',
+                                      headers: {
+                                        'content-type': 'application/json',
+                                      },
+                                      body: JSON.stringify({
+                                        connectionId: c.id,
+                                        expectedRevision: c.revision,
+                                        versionId: c.mail!.vault!.versionId,
+                                        settings: secret,
+                                      }),
+                                    },
+                                  );
+                                  const value = await response.json();
+                                  if (!response.ok)
+                                    throw Error(
+                                      value.error?.message ??
+                                        'Could not confirm mail settings in Vault.',
+                                    );
+                                  return value;
+                                },
+                              });
+                              setSaved(true);
+                              setRefresh((n) => n + 1);
+                              return true;
+                            } catch (error) {
+                              setError(error);
+                              setRefresh((n) => n + 1);
+                              return false;
+                            } finally {
+                              setBusy(false);
+                            }
+                          }
                           const result = await mutate(
                             `integrations/${c.id}`,
                             'PUT',

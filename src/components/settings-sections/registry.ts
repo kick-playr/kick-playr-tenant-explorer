@@ -6,7 +6,6 @@ import { AppearanceSettings } from './appearance-settings';
 import { PeopleShopsSettings } from './people-shops-settings';
 import { BillingSettings } from './billing-settings';
 import { TrialsVouchersSettings } from './trials-vouchers-settings';
-import { ChatRoomsSettings } from './chat-rooms-settings';
 import { AllSettingsSection } from './all-settings-section';
 /** Add a section component here to extend the second-level settings menu. */
 export const SETTINGS_SECTIONS: readonly {
@@ -28,6 +27,5 @@ export const SETTINGS_SECTIONS: readonly {
     Component: TrialsVouchersSettings,
   },
   { id: 'email', label: 'Email content', Component: EmailContentSettings },
-  { id: 'chat', label: 'Chat rooms', Component: ChatRoomsSettings },
   { id: 'all', label: 'All settings', Component: AllSettingsSection },
 ];

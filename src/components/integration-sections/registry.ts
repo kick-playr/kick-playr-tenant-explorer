@@ -1,3 +1,4 @@
+import { ChatRoomsIntegrationSection } from './chat-rooms-section';
 import { BexioLabelsSection } from './bexio-labels-section';
 import type { ComponentType } from 'react';
 import type { Connection, IntegrationSectionProps } from './types';
@@ -26,6 +27,11 @@ export const INTEGRATION_SECTIONS: readonly IntegrationSection[] = [
   { id: 'imap', label: 'IMAP', Component: ImapIntegrationSection },
   { id: 'pingen', label: 'Pingen', Component: PingenIntegrationSection },
   { id: 'matrix', label: 'Matrix', Component: MatrixIntegrationSection },
+  {
+    id: 'chat-rooms',
+    label: 'Chat rooms',
+    Component: ChatRoomsIntegrationSection,
+  },
 ];
 export function integrationSections(
   connections: Connection[],
@@ -34,6 +40,7 @@ export function integrationSections(
     ...new Set([
       ...connections.map((connection) => connection.provider),
       'bexio',
+      'chat-rooms',
     ]),
   ].flatMap((provider) => {
     const section = INTEGRATION_SECTIONS.find(

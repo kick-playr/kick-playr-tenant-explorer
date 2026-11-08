@@ -1,6 +1,7 @@
 'use client';
 import { useState, type FormEvent } from 'react';
 import { Field, Notice } from './ui';
+export interface MailboxConnectionTest {status:'connected';folders:{name:string;status:'readable'|'missing'|'unreadable';messages:number|null;sampleRead:boolean}[];}
 export interface MailConfiguration {
   host: string;
   port: number;
@@ -8,6 +9,7 @@ export interface MailConfiguration {
   hasPassword: boolean;
   allowedHosts: string[];
   fromAddress?: string;
+  vault?: { resourceId: string; versionId: string };
   inbox?: string;
   archive?: string;
 }
@@ -18,6 +20,8 @@ export function IntegrationMailSettings({
   busy,
   onDirtyChange,
   onSave,
+  onTestEmail,
+  onTestMailbox,
 }: {
   configuration: MailConfiguration;
   provider: 'smtp' | 'imap';
@@ -25,30 +29,48 @@ export function IntegrationMailSettings({
   busy: boolean;
   onDirtyChange: (dirty: boolean) => void;
   onSave: (secret: Record<string, unknown>) => Promise<boolean>;
+  onTestEmail?: (recipient: string) => Promise<void>;
+  onTestMailbox?: () => Promise<MailboxConnectionTest>;
 }) {
   const [host, setHost] = useState(configuration.host),
     [port, setPort] = useState(configuration.port),
     [user, setUser] = useState(configuration.user),
     [password, setPassword] = useState(''),
+    [fromAddress, setFromAddress] = useState(configuration.fromAddress ?? ''),
     [inbox, setInbox] = useState(configuration.inbox ?? 'INBOX'),
     [archive, setArchive] = useState(configuration.archive ?? 'Archive');
   const [error, setError] = useState('');
+  const [recipient,setRecipient]=useState('');
+  const [testing,setTesting]=useState(false);
+  const [testResult,setTestResult]=useState('');
   const changed = (
     next: Partial<{
       host: string;
       port: number;
       user: string;
       password: string;
+      fromAddress: string;
       inbox: string;
       archive: string;
     }>,
   ) => {
-    const value = { host, port, user, password, inbox, archive, ...next };
+    const value = {
+      host,
+      port,
+      user,
+      password,
+      fromAddress,
+      inbox,
+      archive,
+      ...next,
+    };
     onDirtyChange(
       value.host !== configuration.host ||
         value.port !== configuration.port ||
         value.user !== configuration.user ||
         !!value.password ||
+        (provider === 'smtp' &&
+          value.fromAddress !== (configuration.fromAddress ?? '')) ||
         (provider === 'imap' &&
           (value.inbox !== (configuration.inbox ?? 'INBOX') ||
             value.archive !== (configuration.archive ?? 'Archive'))),
@@ -59,6 +81,8 @@ export function IntegrationMailSettings({
     port !== configuration.port ||
     user !== configuration.user ||
     !!password ||
+    (provider === 'smtp' &&
+      fromAddress !== (configuration.fromAddress ?? '')) ||
     (provider === 'imap' &&
       (inbox !== configuration.inbox || archive !== configuration.archive));
   async function save(event: FormEvent) {
@@ -76,6 +100,7 @@ export function IntegrationMailSettings({
         port,
         user,
         ...(password ? { password } : {}),
+        ...(provider === 'smtp' ? { fromAddress } : {}),
         ...(provider === 'imap' ? { inbox, archive } : {}),
       });
     } finally {
@@ -98,30 +123,22 @@ export function IntegrationMailSettings({
           Disable this connection before editing its settings.
         </p>
       )}
-      {!configuration.allowedHosts.length && (
-        <Notice>
-          No mail hosts are configured for this provider. An operator must
-          configure the server allowlist first.
-        </Notice>
-      )}
       {error && <Notice error>{error}</Notice>}
       <fieldset disabled={busy || active}>
         <Field label="Mail server">
-          <select
+          <input
+            type="text"
             value={host}
             required
+            autoComplete="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            placeholder={provider === 'smtp' ? 'smtp.example.com' : 'imap.example.com'}
             onChange={(e) => {
               setHost(e.target.value);
               changed({ host: e.target.value });
             }}
-          >
-            <option value="">Select a server</option>
-            {configuration.allowedHosts.map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </select>
+          />
         </Field>
         <Field label="TLS port">
           <select
@@ -174,9 +191,19 @@ export function IntegrationMailSettings({
         {provider === 'smtp' ? (
           <Field
             label="Sender address"
-            hint="The sender identity is managed by the server."
+            hint="Saved in this tenant’s Vault SMTP configuration."
           >
-            <input readOnly value={configuration.fromAddress ?? ''} />
+            <input
+              type="email"
+              required
+              maxLength={254}
+              autoComplete="off"
+              value={fromAddress}
+              onChange={(e) => {
+                setFromAddress(e.target.value);
+                changed({ fromAddress: e.target.value });
+              }}
+            />
           </Field>
         ) : (
           <>
@@ -207,7 +234,7 @@ export function IntegrationMailSettings({
         <button
           className="button primary"
           disabled={
-            busy || active || !dirty || !configuration.allowedHosts.length
+            busy || active || !dirty
           }
         >
           Save mail settings
@@ -217,6 +244,44 @@ export function IntegrationMailSettings({
           separately when ready.
         </p>
       </fieldset>
+      {provider === 'imap' && onTestMailbox && (
+        <div className="smtp-test-email">
+          <p className="muted">Checks the saved mailbox connection and reads both configured folders without changing messages.</p>
+          {dirty && <p className="muted">Save your changes before testing the mailbox.</p>}
+          <button type="button" className="button smtp-test-send" disabled={busy || testing || dirty}
+            onClick={async()=>{
+              setTestResult('');setTesting(true);
+              try {
+                const result=await onTestMailbox();
+                setTestResult('Connection successful. '+result.folders.map(folder=>
+                  `${folder.name}: ${folder.status==='missing'?'folder not found':folder.status==='unreadable'?'could not read folder':folder.messages===0?'readable (empty)':`readable (${folder.messages} messages, sample read)`}`
+                ).join('. ')+'.');
+              }catch(error){setTestResult(error instanceof Error?error.message:'Could not connect to or read the mailbox.');}
+              finally{setTesting(false);}
+            }}>{testing?'Testing…':'Test Mailbox'}</button>
+          {testResult && <p role="status">{testResult}</p>}
+        </div>
+      )}
+      {provider === 'smtp' && onTestEmail && (
+        <div className="smtp-test-email">
+          <Field label="Test recipient" hint="Uses the saved SMTP settings. Testing does not change whether SMTP is enabled.">
+            <input type="email" value={recipient} autoComplete="email" maxLength={254}
+              disabled={busy || testing}
+              onChange={event=>{setRecipient(event.target.value);setTestResult('');}} />
+          </Field>
+          {dirty && <p className="muted">Save your changes before sending a test email.</p>}
+          <button type="button" className="button smtp-test-send" disabled={busy || testing || dirty || !recipient.trim()}
+            onClick={async()=>{
+              setTestResult('');
+              if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)){setTestResult('Enter a valid test email recipient.');return;}
+              setTesting(true);
+              try {await onTestEmail(recipient);setTestResult('Test email accepted by the mail server.');}
+              catch(error){setTestResult(error instanceof Error?error.message:'Could not confirm the test email. Check the recipient before retrying.');}
+              finally{setTesting(false);}
+            }}>{testing?'Sending…':'Test Email'}</button>
+          {testResult && <p role="status">{testResult}</p>}
+        </div>
+      )}
     </form>
   );
 }

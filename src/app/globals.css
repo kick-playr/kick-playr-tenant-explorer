@@ -362,6 +362,18 @@ input:read-only {
 .button.primary:hover {
   background: var(--theme-subtle);
 }
+.button.smtp-test-send {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-on-accent);
+}
+.button.smtp-test-send:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+  border-color: var(--color-accent-hover);
+}
+.smtp-test-email {
+  margin-top: 20px;
+}
 .button.secondary {
   background: var(--theme-surface);
   border-color: var(--line);
@@ -2607,7 +2619,7 @@ input[type='checkbox'] {
 }
 .team-inventory {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.5rem;
 }
 .team-card {
   display: grid;
@@ -2616,14 +2628,20 @@ input[type='checkbox'] {
   align-items: center;
   border: 1px solid var(--color-border, #64748b);
   border-radius: 0.75rem;
-  padding: 1rem;
+  padding: 0.5rem 0.875rem;
   overflow-wrap: anywhere;
 }
 .team-card h3 {
   margin: 0;
 }
+.team-card[data-readiness='missing'] {
+  background: color-mix(in srgb, var(--color-surface) 85%, var(--color-muted));
+}
+.team-card[data-readiness='verified'] {
+  background: var(--color-selected);
+}
 .team-card p {
-  margin: 0.25rem 0;
+  margin: 0.125rem 0;
 }
 .team-season {
   border: 0;
@@ -2641,9 +2659,14 @@ input[type='checkbox'] {
 .team-toggle {
   min-height: 44px;
 }
-.team-toggle[aria-pressed='true'] {
-  box-shadow: inset 0 0 0 2px currentColor;
+.club-teams .team-toggle[aria-pressed='true'] {
+  background: var(--color-selected);
+  color: var(--color-text);
+  border-color: var(--color-border);
   font-weight: 700;
+}
+.club-teams .team-toggle[aria-pressed='true'] .field-hint {
+  color: inherit;
 }
 .team-operation {
   padding: 1rem;
@@ -2669,4 +2692,41 @@ input[type='checkbox'] {
   max-width: 100%;
   white-space: normal;
   overflow-wrap: anywhere;
+}
+.static-secrets-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  margin-block: 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+}
+.static-secrets-table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  text-align: left;
+}
+.static-secrets-table th,
+.static-secrets-table td {
+  padding: 0.75rem 1rem;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--color-border);
+  overflow-wrap: anywhere;
+}
+.static-secrets-table thead {
+  background: var(--color-surface-raised);
+}
+.static-secrets-table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+.static-secrets-table th[scope='row'] {
+  font-weight: 600;
+}
+.static-secrets-table td:nth-child(4) {
+  max-width: 20rem;
+}
+.static-secret-copy {
+  width: 44px;
+  min-height: 44px;
+  padding: 0.625rem;
 }

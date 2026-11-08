@@ -35,10 +35,13 @@ export async function proxyRequest(
             teamMatch[2]!,
           ))));
   if (teamMatch && !teamRoute) return fail(400, 'Invalid club team operation');
+  const integrationTest = request.method === 'POST' &&
+    /^clubs\/(development|test|preview|production)\/[a-z0-9][a-z0-9-]{0,63}\/integrations\/[a-z0-9][a-z0-9-]{0,63}\/(?:test-email|test-mailbox)$/.test(path);
   const club =
+    integrationTest ||
     teamRoute ||
     callback ||
-    /^clubs(?:\/(development|test|preview|production)\/[a-z0-9][a-z0-9-]{0,63}\/(?:catalog\/(?:categories|branches)(?:\/flags\/[A-Za-z][A-Za-z0-9]{0,63})?|branding|settings|integrations(?:\/[a-z0-9][a-z0-9-]{0,63}(?:\/connect)?)?))?$/.test(
+    /^clubs(?:\/(development|test|preview|production)\/[a-z0-9][a-z0-9-]{0,63}\/(?:catalog\/(?:categories|branches)(?:\/flags\/[A-Za-z][A-Za-z0-9]{0,63})?|branding|settings|chat\/(?:status|spaces)|integrations(?:\/[a-z0-9][a-z0-9-]{0,63}(?:\/connect)?)?))?$/.test(
       path,
     );
   if (
@@ -124,7 +127,7 @@ export async function proxyRequest(
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
-        signal: AbortSignal.any([request.signal, AbortSignal.timeout(10000)]),
+        signal: AbortSignal.any([request.signal, AbortSignal.timeout(integrationTest ? 95000 : 10000)]),
       },
     );
     if (!response.headers.get('content-type')?.includes('application/json'))

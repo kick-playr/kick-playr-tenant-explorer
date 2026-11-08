@@ -13,6 +13,8 @@ export function IntegrationConnectionCard({
   onToggle,
   onSave,
   onDirtyChange,
+  request,
+  onBusyChange,
 }: IntegrationActions & { connection: Connection }) {
   const [expanded, setExpanded] = useState(false);
   const settingsId = useId();
@@ -76,6 +78,25 @@ export function IntegrationConnectionCard({
                 busy={busy}
                 onDirtyChange={(dirty) => onDirtyChange(c.id, dirty)}
                 onSave={(secret) => onSave(c, secret)}
+                onTestMailbox={c.provider==='imap' && c.mail.vault && request ? async()=>{
+                  onBusyChange?.(true);
+                  try {
+                    const result=await request(`${path}/integrations/${encodeURIComponent(c.id)}/test-mailbox`,{
+                      method:'POST',body:JSON.stringify({expectedRevision:c.revision,resourceId:c.mail!.vault!.resourceId,versionId:c.mail!.vault!.versionId}),
+                    }) as import('../integration-mail-settings').MailboxConnectionTest;
+                    if(result.status!=='connected'||!Array.isArray(result.folders)||result.folders.length!==2)throw Error('Could not confirm the mailbox test result.');
+                    return result;
+                  }finally{onBusyChange?.(false);}
+                }:undefined}
+                onTestEmail={c.provider==='smtp' && c.mail.vault && request ? async(recipient)=>{
+                  onBusyChange?.(true);
+                  try {
+                    const result=await request(`${path}/integrations/${encodeURIComponent(c.id)}/test-email`,{
+                      method:'POST',body:JSON.stringify({expectedRevision:c.revision,resourceId:c.mail!.vault!.resourceId,versionId:c.mail!.vault!.versionId,recipient}),
+                    }) as {status?:string};
+                    if(result.status!=='accepted')throw Error('Could not confirm the test email. Check the recipient before retrying.');
+                  }finally{onBusyChange?.(false);}
+                }:undefined}
               />
             )}
             {c.oauth && (

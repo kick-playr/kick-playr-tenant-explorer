@@ -130,16 +130,6 @@ export const SETTINGS_GROUPS: readonly {
     title: 'Email content',
     fields: [field('emailContent', 'Email content', 'object')],
   },
-  {
-    id: 'chat',
-    title: 'Chat rooms',
-    fields: [
-      field('matrixAdminRoomId', 'Administrator room'),
-      field('matrixBoardMembersRoomId', 'Board members room'),
-      field('matrix1418CoachRoomId', '1418 coach room'),
-      field('matrixTrainersRoomId', 'Trainers room'),
-    ],
-  },
 ];
 export function writableValue(
   settings: ClubSettingsSnapshot,
@@ -147,7 +137,12 @@ export function writableValue(
 ): unknown {
   const value =
     key === 'emailContent' ? settings.emailTemplates : settings[key];
-  if (key === 'responsiblePerson' && value && typeof value === 'object' && !Array.isArray(value)) {
+  if (
+    key === 'responsiblePerson' &&
+    value &&
+    typeof value === 'object' &&
+    !Array.isArray(value)
+  ) {
     const source = { ...(value as Record<string, unknown>) };
     delete source.kiosk;
     return source;
@@ -216,7 +211,10 @@ export function settingsPatch(
       }
       if (f.choices && !f.choices.includes(text))
         throw Error(`${f.label}: select a supported value.`);
-      if (f.key === 'responsiblePerson' && Object.prototype.hasOwnProperty.call(value, 'kiosk'))
+      if (
+        f.key === 'responsiblePerson' &&
+        Object.prototype.hasOwnProperty.call(value, 'kiosk')
+      )
         throw Error('Responsible people: unsupported role.');
       if (f.key === 'branding') validateBranding(value);
       if (f.key === 'emailContent') {
